@@ -2,6 +2,7 @@ import os
 import hmac
 import hashlib
 import json
+from functools import wraps
 from urllib.parse import parse_qsl
 from flask import Flask, request, jsonify, render_template
 from database import db, Admin, User, Service, Order, Deposit
@@ -52,6 +53,17 @@ def verify_telegram_init_data(init_data: str) -> dict | None:
     return json.loads(user_raw)
 
 
+def require_admin(f):
+    @wraps(f)
+    def wrapper(*args, **kwargs):
+        init_data = request.headers.get("X-Telegram-Init-Data", "")
+        user = verify_telegram_init_data(init_data)
+        if user is None or str(user.get("id")) not in ADMIN_IDS:
+            return jsonify({"ok": False, "error": "unauthorized"}), 403
+        return f(*args, **kwargs)
+    return wrapper
+
+
 @app.route("/")
 def index():
     return render_template("index.html")
@@ -94,6 +106,7 @@ def auth():
 
 
 @app.route("/api/admin/summary")
+@require_admin
 def admin_summary():
     return jsonify(
         {
@@ -101,6 +114,71 @@ def admin_summary():
             "pending_deposits": Deposit.query.filter_by(status="pending").count(),
         }
     )
+
+
+@app.route("/api/admin/services", methods=["GET"])
+@require_admin
+def list_services():
+    services = Service.query.order_by(Service.category, Service.name).all()
+    return jsonify([
+        {
+            "id": s.id,
+            "category": s.category,
+            "name": s.name,
+            "package_name": s.package_name,
+            "price": s.price,
+            "image_url": s.image_url,
+            "active": s.active,
+        }
+        for s in services
+    ])
+
+
+@app.route("/api/admin/services", methods=["POST"])
+@require_admin
+def add_service():
+    body = request.get_json(silent=True) or {}
+    service = Service(
+        category=body.get("category", ""),
+        name=body.get("name", ""),
+        package_name=body.get("package_name"),
+        price=float(body.get("price", 0)),
+        image_url=body.get("image_url"),
+        active=bool(body.get("active", True)),
+    )
+    db.session.add(service)
+    db.session.commit()
+    return jsonify({"ok": True, "id": service.id})
+
+
+@app.route("/api/admin/services/<int:service_id>", methods=["PUT"])
+@require_admin
+def edit_service(service_id):
+    service = Service.query.get_or_404(service_id)
+    body = request.get_json(silent=True) or {}
+    if "category" in body:
+        service.category = body["category"]
+    if "name" in body:
+        service.name = body["name"]
+    if "package_name" in body:
+        service.package_name = body["package_name"]
+    if "price" in body:
+        service.price = float(body["price"])
+    if "image_url" in body:
+        service.image_url = body["image_url"]
+    if "active" in body:
+        service.active = bool(body["active"])
+    db.session.commit()
+    return jsonify({"ok": True})
+
+
+@app.route("/api/admin/services/<int:service_id>", methods=["DELETE"])
+@require_admin
+def delete_service(service_id):
+    service = Service.query.get_or_404(service_id)
+    db.session.delete(service)
+    db.session.commit()
+    return jsonify({"ok": True})
 
 
 if __name__ == "__main__":
