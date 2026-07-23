@@ -15,6 +15,7 @@ function showAdminSection(id) {
 
   if (id === "admin-services-section") loadServices();
   if (id === "admin-deposits-section") loadDeposits();
+  if (id === "admin-orders-section") loadOrders();
 }
 
 function adminHeaders(extra = {}) {
@@ -260,6 +261,72 @@ async function rejectDeposit(id) {
     const data = await res.json();
     if (data.ok) loadDeposits();
     else alert("تعذّر رفض الإيداع.");
+  } catch (err) {}
+}
+
+async function loadOrders() {
+  const list = document.getElementById("orders-list");
+  list.innerHTML = '<p class="placeholder">جاري التحميل...</p>';
+
+  try {
+    const res = await fetch("/api/admin/orders", { headers: adminHeaders() });
+    const orders = await res.json();
+
+    if (!Array.isArray(orders) || orders.length === 0) {
+      list.innerHTML = '<p class="placeholder">لا يوجد طلبات معلّقة حالياً.</p>';
+      return;
+    }
+
+    list.innerHTML = "";
+    orders.forEach((o) => {
+      const row = document.createElement("div");
+      row.className = "service-row";
+      row.innerHTML = `
+        <div class="service-info">
+          <span class="service-name">${o.service_name}${o.package_name ? " — " + o.package_name : ""}</span>
+          <span class="service-meta">مستخدم: ${o.user_telegram_id}${o.player_id ? " · معرّف اللاعب: " + o.player_id : ""} · ${o.price.toFixed(2)}$</span>
+        </div>
+        <div class="service-actions">
+          <button class="icon-btn complete-order">تم التنفيذ</button>
+          <button class="icon-btn danger cancel-order">إلغاء</button>
+        </div>
+      `;
+      list.appendChild(row);
+
+      row.querySelector(".complete-order").addEventListener("click", () => completeOrder(o.id));
+      row.querySelector(".cancel-order").addEventListener("click", () => cancelOrder(o.id));
+    });
+  } catch (err) {
+    list.innerHTML = '<p class="placeholder">حدث خطأ أثناء التحميل.</p>';
+  }
+}
+
+async function completeOrder(id) {
+  if (!confirm("متأكد إنك نفّذت هاد الطلب؟")) return;
+
+  try {
+    const res = await fetch(`/api/admin/orders/${id}/complete`, {
+      method: "POST",
+      headers: adminHeaders(),
+    });
+    const data = await res.json();
+    if (data.ok) loadOrders();
+    else alert("تعذّر تنفيذ العملية.");
+  } catch (err) {}
+}
+
+async function cancelOrder(id) {
+  const reason = prompt("سبب الإلغاء (اختياري):") || "";
+
+  try {
+    const res = await fetch(`/api/admin/orders/${id}/cancel`, {
+      method: "POST",
+      headers: adminHeaders({ "Content-Type": "application/json" }),
+      body: JSON.stringify({ reason }),
+    });
+    const data = await res.json();
+    if (data.ok) loadOrders();
+    else alert("تعذّر إلغاء الطلب.");
   } catch (err) {}
 }
 
