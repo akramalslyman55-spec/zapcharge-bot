@@ -8,7 +8,6 @@ from flask import Flask, request, jsonify, render_template
 from database import db, Admin, User, Service, Order, Deposit
 
 BOT_TOKEN = os.environ.get("BOT_TOKEN", "")
-# Comma-separated Telegram numeric IDs, e.g. "111111111,222222222"
 ADMIN_IDS = set(
     x.strip() for x in os.environ.get("ADMIN_IDS", "").split(",") if x.strip()
 )
@@ -177,6 +176,54 @@ def edit_service(service_id):
 def delete_service(service_id):
     service = Service.query.get_or_404(service_id)
     db.session.delete(service)
+    db.session.commit()
+    return jsonify({"ok": True})
+
+
+@app.route("/api/admin/deposits", methods=["GET"])
+@require_admin
+def list_deposits():
+    deposits = Deposit.query.filter_by(status="pending").order_by(Deposit.created_at.desc()).all()
+    return jsonify([
+        {
+            "id": d.id,
+            "user_telegram_id": d.user_telegram_id,
+            "method": d.method,
+            "amount": d.amount,
+            "proof_text": d.proof_text,
+            "proof_image_url": d.proof_image_url,
+        }
+        for d in deposits
+    ])
+
+
+@app.route("/api/admin/deposits/<int:deposit_id>/approve", methods=["POST"])
+@require_admin
+def approve_deposit(deposit_id):
+    deposit = Deposit.query.get_or_404(deposit_id)
+    if deposit.status != "pending":
+        return jsonify({"ok": False, "error": "already_processed"}), 400
+
+    user = User.query.filter_by(telegram_id=deposit.user_telegram_id).first()
+    if user is None:
+        return jsonify({"ok": False, "error": "user_not_found"}), 404
+
+    user.balance += deposit.amount
+    deposit.status = "approved"
+    db.session.commit()
+    return jsonify({"ok": True})
+
+
+@app.route("/api/admin/deposits/<int:deposit_id>/reject", methods=["POST"])
+@require_admin
+def reject_deposit(deposit_id):
+    deposit = Deposit.query.get_or_404(deposit_id)
+    if deposit.status != "pending":
+        return jsonify({"ok": False, "error": "already_processed"}), 400
+
+    body = request.get_json(silent=True) or {}
+    deposit.status = "rejected"
+    deposit.reject_reason = body.get("reason", "")
     db.session.commit()
     return jsonify({"ok": True})
 
