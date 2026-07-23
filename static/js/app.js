@@ -16,6 +16,7 @@ function showAdminSection(id) {
   if (id === "admin-services-section") loadServices();
   if (id === "admin-deposits-section") loadDeposits();
   if (id === "admin-orders-section") loadOrders();
+  if (id === "admin-admins-section") loadAdmins();
 }
 
 function adminHeaders(extra = {}) {
@@ -74,6 +75,10 @@ function setupAdminNav() {
   document.getElementById("open-add-service").addEventListener("click", () => openServiceModal());
   document.getElementById("cancel-service-modal").addEventListener("click", closeServiceModal);
   document.getElementById("save-service").addEventListener("click", saveService);
+
+  document.getElementById("open-add-admin").addEventListener("click", openAdminModal);
+  document.getElementById("cancel-admin-modal").addEventListener("click", closeAdminModal);
+  document.getElementById("save-admin").addEventListener("click", saveAdmin);
 }
 
 const categoryLabels = {
@@ -327,6 +332,127 @@ async function cancelOrder(id) {
     const data = await res.json();
     if (data.ok) loadOrders();
     else alert("تعذّر إلغاء الطلب.");
+  } catch (err) {}
+}
+
+const permissionLabels = {
+  can_manage_prices: "الأسعار",
+  can_approve_deposits: "الإيداعات",
+  can_fulfill_orders: "الطلبات",
+  can_manage_admins: "المشرفين",
+};
+
+let editingAdminId = null;
+
+async function loadAdmins() {
+  const list = document.getElementById("admins-list");
+  list.innerHTML = '<p class="placeholder">جاري التحميل...</p>';
+
+  try {
+    const res = await fetch("/api/admin/admins", { headers: adminHeaders() });
+    const admins = await res.json();
+
+    if (!Array.isArray(admins) || admins.length === 0) {
+      list.innerHTML = '<p class="placeholder">لا يوجد مشرفين إضافيين بعد.</p>';
+      return;
+    }
+
+    list.innerHTML = "";
+    admins.forEach((a) => {
+      const perms = Object.keys(permissionLabels)
+        .filter((k) => a[k])
+        .map((k) => permissionLabels[k])
+        .join("، ") || "بدون صلاحيات";
+
+      const row = document.createElement("div");
+      row.className = "service-row";
+      row.innerHTML = `
+        <div class="service-info">
+          <span class="service-name">${a.telegram_id}</span>
+          <span class="service-meta">${perms}</span>
+        </div>
+        <div class="service-actions">
+          <button class="icon-btn edit-admin">تعديل</button>
+          <button class="icon-btn danger delete-admin">حذف</button>
+        </div>
+      `;
+      list.appendChild(row);
+
+      row.querySelector(".edit-admin").addEventListener("click", () => openAdminModal(a));
+      row.querySelector(".delete-admin").addEventListener("click", () => deleteAdmin(a.id));
+    });
+  } catch (err) {
+    list.innerHTML = '<p class="placeholder">حدث خطأ أثناء التحميل.</p>';
+  }
+}
+
+function openAdminModal(admin = null) {
+  editingAdminId = admin ? admin.id : null;
+  const idField = document.getElementById("admin-telegram-id");
+  idField.value = admin ? admin.telegram_id : "";
+  idField.disabled = !!admin;
+  document.getElementById("admin-can-prices").checked = admin ? admin.can_manage_prices : false;
+  document.getElementById("admin-can-deposits").checked = admin ? admin.can_approve_deposits : false;
+  document.getElementById("admin-can-orders").checked = admin ? admin.can_fulfill_orders : false;
+  document.getElementById("admin-can-admins").checked = admin ? admin.can_manage_admins : false;
+  document.getElementById("admin-modal").classList.remove("hidden");
+}
+
+function closeAdminModal() {
+  document.getElementById("admin-modal").classList.add("hidden");
+  document.getElementById("admin-telegram-id").disabled = false;
+}
+
+async function saveAdmin() {
+  const body = {
+    can_manage_prices: document.getElementById("admin-can-prices").checked,
+    can_approve_deposits: document.getElementById("admin-can-deposits").checked,
+    can_fulfill_orders: document.getElementById("admin-can-orders").checked,
+    can_manage_admins: document.getElementById("admin-can-admins").checked,
+  };
+
+  if (!editingAdminId) {
+    const telegramId = document.getElementById("admin-telegram-id").value.trim();
+    if (!telegramId) {
+      alert("لازم تكتب آيدي تيليجرام");
+      return;
+    }
+    body.telegram_id = telegramId;
+  }
+
+  try {
+    const url = editingAdminId ? `/api/admin/admins/${editingAdminId}` : "/api/admin/admins";
+    const method = editingAdminId ? "PUT" : "POST";
+
+    const res = await fetch(url, {
+      method,
+      headers: adminHeaders({ "Content-Type": "application/json" }),
+      body: JSON.stringify(body),
+    });
+    const data = await res.json();
+
+    if (!data.ok) {
+      alert(data.error === "already_admin" ? "هاد الآيدي مشرف أصلاً" : "حدث خطأ، جرّب مرة ثانية.");
+      return;
+    }
+
+    closeAdminModal();
+    loadAdmins();
+  } catch (err) {
+    alert("حدث خطأ، جرّب مرة ثانية.");
+  }
+}
+
+async function deleteAdmin(id) {
+  if (!confirm("متأكد إنك بدك تحذف هاد المشرف؟")) return;
+
+  try {
+    const res = await fetch(`/api/admin/admins/${id}`, {
+      method: "DELETE",
+      headers: adminHeaders(),
+    });
+    const data = await res.json();
+    if (data.ok) loadAdmins();
   } catch (err) {}
 }
 
