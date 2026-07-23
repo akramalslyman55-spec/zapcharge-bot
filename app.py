@@ -228,5 +228,54 @@ def reject_deposit(deposit_id):
     return jsonify({"ok": True})
 
 
+@app.route("/api/admin/orders", methods=["GET"])
+@require_admin
+def list_orders():
+    orders = Order.query.filter_by(status="pending").order_by(Order.created_at.desc()).all()
+    result = []
+    for o in orders:
+        service = Service.query.get(o.service_id)
+        result.append({
+            "id": o.id,
+            "user_telegram_id": o.user_telegram_id,
+            "service_name": service.name if service else "خدمة محذوفة",
+            "package_name": service.package_name if service else None,
+            "player_id": o.player_id,
+            "price": o.price,
+        })
+    return jsonify(result)
+
+
+@app.route("/api/admin/orders/<int:order_id>/complete", methods=["POST"])
+@require_admin
+def complete_order(order_id):
+    order = Order.query.get_or_404(order_id)
+    if order.status != "pending":
+        return jsonify({"ok": False, "error": "already_processed"}), 400
+
+    order.status = "done"
+    db.session.commit()
+    return jsonify({"ok": True})
+
+
+@app.route("/api/admin/orders/<int:order_id>/cancel", methods=["POST"])
+@require_admin
+def cancel_order(order_id):
+    order = Order.query.get_or_404(order_id)
+    if order.status != "pending":
+        return jsonify({"ok": False, "error": "already_processed"}), 400
+
+    body = request.get_json(silent=True) or {}
+
+    user = User.query.filter_by(telegram_id=order.user_telegram_id).first()
+    if user is not None:
+        user.balance += order.price
+
+    order.status = "cancelled"
+    order.cancel_reason = body.get("reason", "")
+    db.session.commit()
+    return jsonify({"ok": True})
+
+
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)), debug=True)
