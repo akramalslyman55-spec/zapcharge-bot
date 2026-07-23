@@ -22,105 +22,52 @@
       <span class="brand">Zapcharge</span>
       <span class="balance-pill" id="store-balance">0.00$</span>
     </header>
-
     <main class="content">
       <p class="placeholder">واجهة المتجر — رح نصممها بالتفصيل بالخطوة الجاية.</p>
     </main>
   </div>
 
   <div id="admin-view" class="screen hidden">
-
     <header class="topbar admin">
-      <span class="brand">
-        Zapcharge
-        <span class="admin-tag">إدارة</span>
-      </span>
+      <span class="brand">Zapcharge <span class="admin-tag">إدارة</span></span>
     </header>
 
     <nav class="admin-nav">
-      <button class="nav-btn active" data-admin-section="admin-dashboard-section">
-        الرئيسية
-      </button>
-
-      <button class="nav-btn" data-admin-section="admin-services-section">
-        الخدمات
-      </button>
-
-      <button class="nav-btn" data-admin-section="admin-deposits-section">
-        الإيداعات
-      </button>
+      <button class="nav-btn active" data-admin-section="admin-dashboard-section">الرئيسية</button>
+      <button class="nav-btn" data-admin-section="admin-services-section">الخدمات</button>
+      <button class="nav-btn" data-admin-section="admin-deposits-section">الإيداعات</button>
     </nav>
 
     <main class="content">
-
-      <!-- Dashboard -->
-
       <div id="admin-dashboard-section" class="admin-section">
-
         <div class="stat-row">
-
           <div class="stat-card">
             <span class="stat-label">طلبات معلّقة</span>
             <span class="stat-value" id="stat-orders">—</span>
           </div>
-
           <div class="stat-card">
             <span class="stat-label">إيداعات معلّقة</span>
             <span class="stat-value" id="stat-deposits">—</span>
           </div>
-
         </div>
-
-        <p class="placeholder">
-          باقي شاشات الإدارة (الطلبات، الإيداعات، المشرفين...) رح نبنيها وحدة وحدة فوق هالهيكل.
-        </p>
-
+        <p class="placeholder">باقي شاشات الإدارة (الطلبات، المشرفين...) رح نبنيها وحدة وحدة فوق هالهيكل.</p>
       </div>
-
-      <!-- Services -->
 
       <div id="admin-services-section" class="admin-section hidden">
-
-        <button class="btn-primary" id="open-add-service">
-          + إضافة خدمة
-        </button>
-
+        <button class="btn-primary" id="open-add-service">+ إضافة خدمة</button>
         <div id="services-list" class="services-list"></div>
-
       </div>
-
-      <!-- Deposits -->
 
       <div id="admin-deposits-section" class="admin-section hidden">
-
-        <h2 class="section-title">
-          إدارة الإيداعات
-        </h2>
-
-        <p class="placeholder">
-          سيتم هنا عرض جميع طلبات الإيداع وإمكانية قبولها أو رفضها.
-        </p>
-
-        <div id="deposits-list"></div>
-
+        <div id="deposits-list" class="services-list"></div>
       </div>
-
     </main>
 
-    <!-- Service Modal -->
-
     <div id="service-modal" class="modal hidden">
-
       <div class="modal-box">
+        <h3 id="service-modal-title">إضافة خدمة</h3>
 
-        <h3 id="service-modal-title">
-          إضافة خدمة
-        </h3>
-
-        <label class="field-label">
-          التصنيف
-        </label>
-
+        <label class="field-label">التصنيف</label>
         <select id="service-category" class="field-input">
           <option value="games">ألعاب</option>
           <option value="subscriptions">اشتراكات</option>
@@ -130,50 +77,17 @@
           <option value="bills">فواتير</option>
         </select>
 
-        <label class="field-label">
-          الاسم
-        </label>
+        <label class="field-label">الاسم</label>
+        <input id="service-name" class="field-input" type="text" placeholder="مثال: PUBG Mobile" />
 
-        <input
-          id="service-name"
-          class="field-input"
-          type="text"
-          placeholder="مثال: PUBG Mobile"
-        />
+        <label class="field-label">اسم الباقة (اختياري)</label>
+        <input id="service-package" class="field-input" type="text" placeholder="مثال: 60 شدة" />
 
-        <label class="field-label">
-          اسم الباقة (اختياري)
-        </label>
+        <label class="field-label">السعر ($)</label>
+        <input id="service-price" class="field-input" type="number" step="0.01" placeholder="0.00" />
 
-        <input
-          id="service-package"
-          class="field-input"
-          type="text"
-          placeholder="مثال: 60 شدة"
-        />
-
-        <label class="field-label">
-          السعر ($)
-        </label>
-
-        <input
-          id="service-price"
-          class="field-input"
-          type="number"
-          step="0.01"
-          placeholder="0.00"
-        />
-
-        <label class="field-label">
-          رابط الصورة (اختياري)
-        </label>
-
-        <input
-          id="service-image"
-          class="field-input"
-          type="text"
-          placeholder="https://..."
-        />
+        <label class="field-label">رابط الصورة (اختياري)</label>
+        <input id="service-image" class="field-input" type="text" placeholder="https://..." />
 
         <label class="switch-row">
           <span>مفعّلة</span>
@@ -181,24 +95,13 @@
         </label>
 
         <div class="modal-actions">
-
-          <button class="btn-secondary" id="cancel-service-modal">
-            إلغاء
-          </button>
-
-          <button class="btn-primary" id="save-service">
-            حفظ
-          </button>
-
+          <button class="btn-secondary" id="cancel-service-modal">إلغاء</button>
+          <button class="btn-primary" id="save-service">حفظ</button>
         </div>
-
       </div>
-
     </div>
-
   </div>
 
   <script src="/static/js/app.js"></script>
-
 </body>
-</html>
+            </html>
