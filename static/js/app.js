@@ -13,16 +13,12 @@ function showAdminSection(id) {
     btn.classList.toggle("active", btn.dataset.adminSection === id);
   });
 
-  if (id === "admin-services-section") {
-    loadServices();
-  }
+  if (id === "admin-services-section") loadServices();
+  if (id === "admin-deposits-section") loadDeposits();
 }
 
 function adminHeaders(extra = {}) {
-  return {
-    "X-Telegram-Init-Data": tg.initData,
-    ...extra,
-  };
+  return { "X-Telegram-Init-Data": tg.initData, ...extra };
 }
 
 async function init() {
@@ -52,8 +48,7 @@ async function init() {
       setupAdminNav();
       loadAdminSummary();
     } else {
-      document.getElementById("store-balance").textContent =
-        data.user.balance.toFixed(2) + "$";
+      document.getElementById("store-balance").textContent = data.user.balance.toFixed(2) + "$";
       show("store-view");
     }
   } catch (err) {
@@ -67,9 +62,7 @@ async function loadAdminSummary() {
     const data = await res.json();
     document.getElementById("stat-orders").textContent = data.pending_orders;
     document.getElementById("stat-deposits").textContent = data.pending_deposits;
-  } catch (err) {
-    // silent
-  }
+  } catch (err) {}
 }
 
 function setupAdminNav() {
@@ -83,12 +76,8 @@ function setupAdminNav() {
 }
 
 const categoryLabels = {
-  games: "ألعاب",
-  subscriptions: "اشتراكات",
-  apps: "تطبيقات",
-  cards: "بطاقات",
-  recharge: "تعبئة رصيد",
-  bills: "فواتير",
+  games: "ألعاب", subscriptions: "اشتراكات", apps: "تطبيقات",
+  cards: "بطاقات", recharge: "تعبئة رصيد", bills: "فواتير",
 };
 
 let editingServiceId = null;
@@ -121,7 +110,6 @@ async function loadServices() {
         </div>
       `;
       list.appendChild(row);
-
       row.querySelector(".edit-service").addEventListener("click", () => openServiceModal(s));
       row.querySelector(".delete-service").addEventListener("click", () => deleteService(s.id));
     });
@@ -194,9 +182,85 @@ async function deleteService(id) {
     });
     const data = await res.json();
     if (data.ok) loadServices();
+  } catch (err) {}
+}
+
+const methodLabels = {
+  sham_cash: "شام كاش",
+  syriatel_cash: "سيرياتيل كاش",
+  c_wallet: "سي والت",
+};
+
+async function loadDeposits() {
+  const list = document.getElementById("deposits-list");
+  list.innerHTML = '<p class="placeholder">جاري التحميل...</p>';
+
+  try {
+    const res = await fetch("/api/admin/deposits", { headers: adminHeaders() });
+    const deposits = await res.json();
+
+    if (!Array.isArray(deposits) || deposits.length === 0) {
+      list.innerHTML = '<p class="placeholder">لا يوجد إيداعات معلّقة حالياً.</p>';
+      return;
+    }
+
+    list.innerHTML = "";
+    deposits.forEach((d) => {
+      const row = document.createElement("div");
+      row.className = "service-row";
+      row.innerHTML = `
+        <div class="service-info">
+          <span class="service-name">${methodLabels[d.method] || d.method} — ${d.amount.toFixed(2)}$</span>
+          <span class="service-meta">مستخدم: ${d.user_telegram_id}${d.proof_text ? " · رقم العملية: " + d.proof_text : ""}</span>
+        </div>
+        <div class="service-actions">
+          ${d.proof_image_url ? '<button class="icon-btn view-proof">الإثبات</button>' : ""}
+          <button class="icon-btn approve-deposit">قبول</button>
+          <button class="icon-btn danger reject-deposit">رفض</button>
+        </div>
+      `;
+      list.appendChild(row);
+
+      if (d.proof_image_url) {
+        row.querySelector(".view-proof").addEventListener("click", () => {
+          tg.openLink(d.proof_image_url);
+        });
+      }
+      row.querySelector(".approve-deposit").addEventListener("click", () => approveDeposit(d.id));
+      row.querySelector(".reject-deposit").addEventListener("click", () => rejectDeposit(d.id));
+    });
   } catch (err) {
-    // silent
+    list.innerHTML = '<p class="placeholder">حدث خطأ أثناء التحميل.</p>';
   }
+}
+
+async function approveDeposit(id) {
+  if (!confirm("متأكد إنك بدك تقبل هاي الإيداع؟ رح تضاف القيمة لرصيد المستخدم.")) return;
+
+  try {
+    const res = await fetch(`/api/admin/deposits/${id}/approve`, {
+      method: "POST",
+      headers: adminHeaders(),
+    });
+    const data = await res.json();
+    if (data.ok) loadDeposits();
+    else alert("تعذّر قبول الإيداع.");
+  } catch (err) {}
+}
+
+async function rejectDeposit(id) {
+  const reason = prompt("سبب الرفض (اختياري):") || "";
+
+  try {
+    const res = await fetch(`/api/admin/deposits/${id}/reject`, {
+      method: "POST",
+      headers: adminHeaders({ "Content-Type": "application/json" }),
+      body: JSON.stringify({ reason }),
+    });
+    const data = await res.json();
+    if (data.ok) loadDeposits();
+    else alert("تعذّر رفض الإيداع.");
+  } catch (err) {}
 }
 
 init();
