@@ -34,10 +34,10 @@
 
     <nav class="admin-nav">
       <button class="nav-btn active" data-admin-section="admin-dashboard-section">الرئيسية</button>
-      <button class="nav-btn" data-admin-section="admin-services-section">الخدمات</button>
-      <button class="nav-btn" data-admin-section="admin-deposits-section">الإيداعات</button>
-      <button class="nav-btn" data-admin-section="admin-orders-section">الطلبات</button>
-      <button class="nav-btn" data-admin-section="admin-admins-section">المشرفين</button>
+      <button class="nav-btn" data-admin-section="admin-services-section" data-permission="can_manage_prices">الخدمات</button>
+      <button class="nav-btn" data-admin-section="admin-deposits-section" data-permission="can_approve_deposits">الإيداعات</button>
+      <button class="nav-btn" data-admin-section="admin-orders-section" data-permission="can_fulfill_orders">الطلبات</button>
+      <button class="nav-btn" data-admin-section="admin-admins-section" data-permission="can_manage_admins">المشرفين</button>
     </nav>
 
     <main class="content">
@@ -52,7 +52,7 @@
             <span class="stat-value" id="stat-deposits">—</span>
           </div>
         </div>
-        <p class="placeholder">باقي شاشات الإدارة (الرسالة الجماعية، الأرباح، سجل العمليات) رح نبنيها لاحقاً.</p>
+        <p class="placeholder">باقي شاشات الإدارة (الأرباح، سجل العمليات) رح نبنيها لاحقاً.</p>
       </div>
 
       <div id="admin-services-section" class="admin-section hidden">
