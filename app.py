@@ -1,8 +1,10 @@
+from __future__ import annotations
 import os
 import hmac
 import hashlib
 import json
 import urllib.request
+from typing import Optional, Dict
 from functools import wraps
 from urllib.parse import parse_qsl
 from flask import Flask, request, jsonify, render_template
@@ -14,9 +16,13 @@ ADMIN_IDS = set(
 )
 
 app = Flask(__name__)
-app.config["SQLALCHEMY_DATABASE_URI"] = os.environ.get(
-    "DATABASE_URL", "sqlite:///zapcharge.db"
-)
+
+# إصلاح رابط قاعدة البيانات المأخوذ من Railway ليتوافق مع SQLAlchemy
+db_url = os.environ.get("DATABASE_URL", "sqlite:///zapcharge.db")
+if db_url.startswith("postgres://"):
+    db_url = db_url.replace("postgres://", "postgresql://", 1)
+
+app.config["SQLALCHEMY_DATABASE_URI"] = db_url
 app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 db.init_app(app)
 
@@ -24,7 +30,7 @@ with app.app_context():
     db.create_all()
 
 
-def verify_telegram_init_data(init_data: str) -> dict | None:
+def verify_telegram_init_data(init_data: str) -> Optional[dict]:
     if not init_data or not BOT_TOKEN:
         return None
 
@@ -608,9 +614,57 @@ def add_admin():
 @require_permission("can_manage_admins")
 def edit_admin(admin_id):
     admin = Admin.query.get_or_404(admin_id)
-    body = request.get_json(silent=True) or {}
+        body = request.get_json(silent=True) or {}
     if "can_manage_prices" in body:
         admin.can_manage_prices = bool(body["can_manage_prices"])
     if "can_manage_admins" in body:
         admin.can_manage_admins = bool(body["can_manage_admins"])
-    if 
+    if "can_fulfill_orders" in body:
+        admin.can_fulfill_orders = bool(body["can_fulfill_orders"])
+    if "can_approve_deposits" in body:
+        admin.can_approve_deposits = bool(body["can_approve_deposits"])
+    log_action(request.telegram_id, "تعديل صلاحيات مشرف", admin.telegram_id)
+    db.session.commit()
+    return jsonify({"ok": True})
+
+
+@app.route("/api/admin/admins/<int:admin_id>", methods=["DELETE"])
+@require_permission("can_manage_admins")
+def delete_admin(admin_id):
+    admin = Admin.query.get_or_404(admin_id)
+    tg_id = admin.telegram_id
+    db.session.delete(admin)
+    log_action(request.telegram_id, "حذف مشرف", tg_id)
+    db.session.commit()
+    return jsonify({"ok": True})
+
+
+@app.route("/api/admin/broadcast", methods=["POST"])
+@require_permission("can_manage_admins")
+def broadcast_message():
+    body = request.get_json(silent=True) or {}
+    message = body.get("message", "").strip()
+
+    if not message:
+        return jsonify({"ok": False, "error": "empty_message"}), 400
+
+    users = User.query.all()
+    sent = 0
+    failed = 0
+    for u in users:
+        if send_telegram_message(u.telegram_id, message):
+            sent += 1
+        else:
+            failed += 1
+
+    details = f"أُرسلت لـ {sent} مستخدم"
+    if failed:
+        details += f"، فشلت لـ {failed}"
+    log_action(request.telegram_id, "رسالة جماعية", details)
+    db.session.commit()
+
+    return jsonify({"ok": True, "sent": sent, "failed": failed})
+
+
+if __name__ == "__main__":
+    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)), debug=True)
