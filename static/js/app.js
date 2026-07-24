@@ -17,6 +17,8 @@ function showAdminSection(id) {
   if (id === "admin-deposits-section") loadDeposits();
   if (id === "admin-orders-section") loadOrders();
   if (id === "admin-admins-section") loadAdmins();
+  if (id === "admin-stats-section") loadStats();
+  if (id === "admin-logs-section") loadLogs();
 }
 
 function adminHeaders(extra = {}) {
@@ -459,6 +461,96 @@ async function deleteAdmin(id) {
     const data = await res.json();
     if (data.ok) loadAdmins();
   } catch (err) {}
+}
+
+async function loadStats() {
+  const container = document.getElementById("stats-content");
+  container.innerHTML = '<p class="placeholder">جاري التحميل...</p>';
+
+  try {
+    const res = await fetch("/api/admin/stats", { headers: adminHeaders() });
+    const s = await res.json();
+
+    container.innerHTML = `
+      <div class="stat-row">
+        <div class="stat-card">
+          <span class="stat-label">إجمالي المبيعات</span>
+          <span class="stat-value">${s.total_sales.toFixed(2)}$</span>
+        </div>
+        <div class="stat-card">
+          <span class="stat-label">طلبات منفّذة</span>
+          <span class="stat-value">${s.completed_orders}</span>
+        </div>
+      </div>
+      <div class="stat-row">
+        <div class="stat-card">
+          <span class="stat-label">طلبات ملغاة</span>
+          <span class="stat-value">${s.cancelled_orders}</span>
+        </div>
+        <div class="stat-card">
+          <span class="stat-label">إجمالي الإيداعات المقبولة</span>
+          <span class="stat-value">${s.total_deposits.toFixed(2)}$</span>
+        </div>
+      </div>
+      <div class="stat-row">
+        <div class="stat-card">
+          <span class="stat-label">إيداعات مقبولة</span>
+          <span class="stat-value">${s.approved_deposits}</span>
+        </div>
+        <div class="stat-card">
+          <span class="stat-label">إيداعات مرفوضة</span>
+          <span class="stat-value">${s.rejected_deposits}</span>
+        </div>
+      </div>
+      <div class="stat-row">
+        <div class="stat-card">
+          <span class="stat-label">إجمالي أرصدة المستخدمين</span>
+          <span class="stat-value">${s.total_balance.toFixed(2)}$</span>
+        </div>
+        <div class="stat-card">
+          <span class="stat-label">عدد المستخدمين</span>
+          <span class="stat-value">${s.total_users}</span>
+        </div>
+      </div>
+    `;
+  } catch (err) {
+    container.innerHTML = '<p class="placeholder">حدث خطأ أثناء التحميل.</p>';
+  }
+}
+
+function formatLogDate(iso) {
+  const d = new Date(iso);
+  return d.toLocaleString("ar-SY", { dateStyle: "short", timeStyle: "short" });
+}
+
+async function loadLogs() {
+  const list = document.getElementById("logs-list");
+  list.innerHTML = '<p class="placeholder">جاري التحميل...</p>';
+
+  try {
+    const res = await fetch("/api/admin/logs", { headers: adminHeaders() });
+    const logs = await res.json();
+
+    if (!Array.isArray(logs) || logs.length === 0) {
+      list.innerHTML = '<p class="placeholder">لا يوجد عمليات مسجّلة بعد.</p>';
+      return;
+    }
+
+    list.innerHTML = "";
+    logs.forEach((l) => {
+      const row = document.createElement("div");
+      row.className = "service-row";
+      row.innerHTML = `
+        <div class="service-info">
+          <span class="service-name">${l.action}${l.details ? " — " + l.details : ""}</span>
+          <span class="service-meta">${l.admin_telegram_id} · ${formatLogDate(l.created_at)}</span>
+        </div>
+      `;
+      list.appendChild(row);
+    });
+  } catch (err) {
+    list.innerHTML = '<p class="placeholder">حدث خطأ أثناء التحميل.</p>';
+  }
 }
 
 init();
