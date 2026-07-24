@@ -2,6 +2,7 @@ import os
 import hmac
 import hashlib
 import json
+import urllib.request
 from functools import wraps
 from urllib.parse import parse_qsl
 from flask import Flask, request, jsonify, render_template
@@ -102,6 +103,19 @@ def log_action(admin_telegram_id: str, action: str, details: str = ""):
         details=details,
     )
     db.session.add(entry)
+
+
+def send_telegram_message(chat_id: str, text: str) -> bool:
+    url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
+    data = json.dumps({"chat_id": chat_id, "text": text}).encode()
+    req = urllib.request.Request(
+        url, data=data, headers={"Content-Type": "application/json"}
+    )
+    try:
+        urllib.request.urlopen(req, timeout=10)
+        return True
+    except Exception:
+        return False
 
 
 def require_admin(f):
@@ -469,6 +483,33 @@ def delete_admin(admin_id):
     log_action(request.telegram_id, "حذف مشرف", tg_id)
     db.session.commit()
     return jsonify({"ok": True})
+
+
+@app.route("/api/admin/broadcast", methods=["POST"])
+@require_permission("can_manage_admins")
+def broadcast_message():
+    body = request.get_json(silent=True) or {}
+    message = body.get("message", "").strip()
+
+    if not message:
+        return jsonify({"ok": False, "error": "empty_message"}), 400
+
+    users = User.query.all()
+    sent = 0
+    failed = 0
+    for u in users:
+        if send_telegram_message(u.telegram_id, message):
+            sent += 1
+        else:
+            failed += 1
+
+    details = f"أُرسلت لـ {sent} مستخدم"
+    if failed:
+        details += f"، فشلت لـ {failed}"
+    log_action(request.telegram_id, "رسالة جماعية", details)
+    db.session.commit()
+
+    return jsonify({"ok": True, "sent": sent, "failed": failed})
 
 
 if __name__ == "__main__":
