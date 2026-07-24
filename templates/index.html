@@ -38,6 +38,7 @@
       <button class="nav-btn" data-admin-section="admin-deposits-section" data-permission="can_approve_deposits">الإيداعات</button>
       <button class="nav-btn" data-admin-section="admin-orders-section" data-permission="can_fulfill_orders">الطلبات</button>
       <button class="nav-btn" data-admin-section="admin-admins-section" data-permission="can_manage_admins">المشرفين</button>
+      <button class="nav-btn" data-admin-section="admin-broadcast-section" data-permission="can_manage_admins">رسالة جماعية</button>
       <button class="nav-btn" data-admin-section="admin-stats-section">الأرباح</button>
       <button class="nav-btn" data-admin-section="admin-logs-section">سجل العمليات</button>
     </nav>
@@ -72,6 +73,13 @@
       <div id="admin-admins-section" class="admin-section hidden">
         <button class="btn-primary" id="open-add-admin">+ إضافة مشرف</button>
         <div id="admins-list" class="services-list"></div>
+      </div>
+
+      <div id="admin-broadcast-section" class="admin-section hidden">
+        <label class="field-label">نص الرسالة</label>
+        <textarea id="broadcast-message" class="field-input" rows="6" placeholder="اكتب رسالتك هون..."></textarea>
+        <button class="btn-primary" id="send-broadcast">إرسال للجميع</button>
+        <p class="placeholder" id="broadcast-result"></p>
       </div>
 
       <div id="admin-stats-section" class="admin-section hidden">
@@ -158,4 +166,4 @@
 
   <script src="/static/js/app.js"></script>
 </body>
-              </html>
+          </html>
