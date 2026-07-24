@@ -130,6 +130,18 @@ def require_admin(f):
     return wrapper
 
 
+def require_user(f):
+    @wraps(f)
+    def wrapper(*args, **kwargs):
+        init_data = request.headers.get("X-Telegram-Init-Data", "")
+        user = verify_telegram_init_data(init_data)
+        if user is None:
+            return jsonify({"ok": False, "error": "unauthorized"}), 401
+        request.telegram_id = str(user.get("id"))
+        return f(*args, **kwargs)
+    return wrapper
+
+
 def require_permission(field: str):
     def decorator(f):
         @wraps(f)
@@ -185,6 +197,130 @@ def auth():
         }
     )
 
+
+# ==================== STORE (USER) ENDPOINTS ====================
+
+@app.route("/api/store/services", methods=["GET"])
+@require_user
+def store_services():
+    services = Service.query.filter_by(active=True).order_by(Service.category, Service.name).all()
+    return jsonify([
+        {
+            "id": s.id,
+            "category": s.category,
+            "name": s.name,
+            "package_name": s.package_name,
+            "price": s.price,
+            "image_url": s.image_url,
+        }
+        for s in services
+    ])
+
+
+@app.route("/api/store/order", methods=["POST"])
+@require_user
+def store_order():
+    body = request.get_json(silent=True) or {}
+    service_id = body.get("service_id")
+    player_id = str(body.get("player_id", "")).strip()
+
+    if not service_id:
+        return jsonify({"ok": False, "error": "missing_service"}), 400
+
+    service = Service.query.get(service_id)
+    if not service or not service.active:
+        return jsonify({"ok": False, "error": "service_not_available"}), 404
+
+    user = User.query.filter_by(telegram_id=request.telegram_id).first()
+    if not user:
+        return jsonify({"ok": False, "error": "user_not_found"}), 404
+
+    if user.balance < service.price:
+        return jsonify({"ok": False, "error": "insufficient_balance"}), 400
+
+    user.balance -= service.price
+    order = Order(
+        user_telegram_id=request.telegram_id,
+        service_id=service.id,
+        player_id=player_id,
+        price=service.price,
+        status="pending"
+    )
+    db.session.add(order)
+    db.session.commit()
+
+    return jsonify({"ok": True, "new_balance": user.balance, "order_id": order.id})
+
+
+@app.route("/api/store/my-orders", methods=["GET"])
+@require_user
+def store_my_orders():
+    orders = Order.query.filter_by(user_telegram_id=request.telegram_id).order_by(Order.created_at.desc()).all()
+    result = []
+    for o in orders:
+        service = Service.query.get(o.service_id)
+        result.append({
+            "id": o.id,
+            "service_name": service.name if service else "خدمة محذوفة",
+            "package_name": service.package_name if service else None,
+            "player_id": o.player_id,
+            "price": o.price,
+            "status": o.status,
+            "cancel_reason": o.cancel_reason,
+            "created_at": o.created_at.isoformat(),
+        })
+    return jsonify(result)
+
+
+@app.route("/api/store/deposit", methods=["POST"])
+@require_user
+def store_deposit():
+    body = request.get_json(silent=True) or {}
+    method = body.get("method", "").strip()
+    try:
+        amount = float(body.get("amount", 0))
+    except (ValueError, TypeError):
+        amount = 0.0
+
+    proof_text = body.get("proof_text", "").strip()
+    proof_image_url = body.get("proof_image_url", "").strip()
+
+    if not method or amount <= 0:
+        return jsonify({"ok": False, "error": "invalid_data"}), 400
+
+    deposit = Deposit(
+        user_telegram_id=request.telegram_id,
+        method=method,
+        amount=amount,
+        proof_text=proof_text or None,
+        proof_image_url=proof_image_url or None,
+        status="pending"
+    )
+    db.session.add(deposit)
+    db.session.commit()
+
+    return jsonify({"ok": True, "deposit_id": deposit.id})
+
+
+@app.route("/api/store/my-deposits", methods=["GET"])
+@require_user
+def store_my_deposits():
+    deposits = Deposit.query.filter_by(user_telegram_id=request.telegram_id).order_by(Deposit.created_at.desc()).all()
+    return jsonify([
+        {
+            "id": d.id,
+            "method": d.method,
+            "amount": d.amount,
+            "proof_text": d.proof_text,
+            "status": d.status,
+            "reject_reason": d.reject_reason,
+            "created_at": d.created_at.isoformat(),
+        }
+        for d in deposits
+    ])
+
+
+# ==================== ADMIN ENDPOINTS ====================
 
 @app.route("/api/admin/summary")
 @require_admin
@@ -345,6 +481,8 @@ def approve_deposit(deposit_id):
     deposit.status = "approved"
     log_action(request.telegram_id, "قبول إيداع", f"{deposit.amount:.2f}$ - {deposit.user_telegram_id}")
     db.session.commit()
+
+    send_telegram_message(deposit.user_telegram_id, f"✅ تم قبول إيداعك بقيمة {deposit.amount:.2f}$ وتمت إضافتها لحسابك!")
     return jsonify({"ok": True})
 
 
@@ -360,6 +498,9 @@ def reject_deposit(deposit_id):
     deposit.reject_reason = body.get("reason", "")
     log_action(request.telegram_id, "رفض إيداع", f"{deposit.amount:.2f}$ - {deposit.user_telegram_id}")
     db.session.commit()
+
+    reason_msg = f"\nالسبب: {deposit.reject_reason}" if deposit.reject_reason else ""
+    send_telegram_message(deposit.user_telegram_id, f"❌ تم رفض طلب الإيداع بقيمة {deposit.amount:.2f}$.{reason_msg}")
     return jsonify({"ok": True})
 
 
@@ -391,6 +532,10 @@ def complete_order(order_id):
     order.status = "done"
     log_action(request.telegram_id, "تنفيذ طلب", f"طلب #{order.id}")
     db.session.commit()
+
+    service = Service.query.get(order.service_id)
+    s_name = service.name if service else "خدمتك"
+    send_telegram_message(order.user_telegram_id, f"✅ تم إكمال طلبك #{order.id} ({s_name}) بنجاح!")
     return jsonify({"ok": True})
 
 
@@ -411,6 +556,9 @@ def cancel_order(order_id):
     order.cancel_reason = body.get("reason", "")
     log_action(request.telegram_id, "إلغاء طلب", f"طلب #{order.id}")
     db.session.commit()
+
+    reason_msg = f"\nالسبب: {order.cancel_reason}" if order.cancel_reason else ""
+    send_telegram_message(order.user_telegram_id, f"❌ تم إلغاء طلبك #{order.id} وإعادة المبلغ ({order.price:.2f}$) لحسابك.{reason_msg}")
     return jsonify({"ok": True})
 
 
@@ -465,52 +613,4 @@ def edit_admin(admin_id):
         admin.can_manage_prices = bool(body["can_manage_prices"])
     if "can_manage_admins" in body:
         admin.can_manage_admins = bool(body["can_manage_admins"])
-    if "can_fulfill_orders" in body:
-        admin.can_fulfill_orders = bool(body["can_fulfill_orders"])
-    if "can_approve_deposits" in body:
-        admin.can_approve_deposits = bool(body["can_approve_deposits"])
-    log_action(request.telegram_id, "تعديل صلاحيات مشرف", admin.telegram_id)
-    db.session.commit()
-    return jsonify({"ok": True})
-
-
-@app.route("/api/admin/admins/<int:admin_id>", methods=["DELETE"])
-@require_permission("can_manage_admins")
-def delete_admin(admin_id):
-    admin = Admin.query.get_or_404(admin_id)
-    tg_id = admin.telegram_id
-    db.session.delete(admin)
-    log_action(request.telegram_id, "حذف مشرف", tg_id)
-    db.session.commit()
-    return jsonify({"ok": True})
-
-
-@app.route("/api/admin/broadcast", methods=["POST"])
-@require_permission("can_manage_admins")
-def broadcast_message():
-    body = request.get_json(silent=True) or {}
-    message = body.get("message", "").strip()
-
-    if not message:
-        return jsonify({"ok": False, "error": "empty_message"}), 400
-
-    users = User.query.all()
-    sent = 0
-    failed = 0
-    for u in users:
-        if send_telegram_message(u.telegram_id, message):
-            sent += 1
-        else:
-            failed += 1
-
-    details = f"أُرسلت لـ {sent} مستخدم"
-    if failed:
-        details += f"، فشلت لـ {failed}"
-    log_action(request.telegram_id, "رسالة جماعية", details)
-    db.session.commit()
-
-    return jsonify({"ok": True, "sent": sent, "failed": failed})
-
-
-if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)), debug=True)
+    if 
