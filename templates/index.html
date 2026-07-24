@@ -17,16 +17,118 @@
     <p class="error-text">تعذّر التحقق من الحساب. جرّب تفتح المتجر من داخل تيليجرام.</p>
   </div>
 
+  <!-- STORE (USER VIEW) -->
   <div id="store-view" class="screen hidden">
     <header class="topbar">
       <span class="brand">Zapcharge</span>
-      <span class="balance-pill" id="store-balance">0.00$</span>
+      <div class="user-pill-container">
+        <span class="balance-pill" id="store-balance">0.00$</span>
+        <button class="btn-top-add" id="topbar-add-funds">➕ شحن</button>
+      </div>
     </header>
-    <main class="content">
-      <p class="placeholder">واجهة المتجر — رح نصممها بالتفصيل بالخطوة الجاية.</p>
+
+    <main class="content user-content">
+      <!-- Section: Catalog / Store Services -->
+      <div id="user-store-section" class="user-section">
+        <div class="category-pills" id="category-filters">
+          <button class="cat-btn active" data-cat="all">الكل</button>
+          <button class="cat-btn" data-cat="games">🎮 ألعاب</button>
+          <button class="cat-btn" data-cat="subscriptions">💎 اشتراكات</button>
+          <button class="cat-btn" data-cat="apps">📱 تطبيقات</button>
+          <button class="cat-btn" data-cat="cards">💳 بطاقات</button>
+          <button class="cat-btn" data-cat="recharge">📲 تعبئة</button>
+          <button class="cat-btn" data-cat="bills">🧾 فواتير</button>
+        </div>
+
+        <div id="user-services-grid" class="services-grid"></div>
+      </div>
+
+      <!-- Section: Deposit Funds -->
+      <div id="user-deposit-section" class="user-section hidden">
+        <h3 class="section-title">طلب إيداع رصيد</h3>
+        
+        <label class="field-label">طريقة الدفع</label>
+        <select id="deposit-method" class="field-input">
+          <option value="sham_cash">شام كاش (Sham Cash)</option>
+          <option value="syriatel_cash">سيرياتيل كاش (Syriatel Cash)</option>
+          <option value="c_wallet">سي والت (C-Wallet)</option>
+        </select>
+
+        <div class="payment-info-box" id="payment-instructions">
+          قم بالتحويل للحساب، ثم أدخل المبلغ ورقم العملية بالأسفل.
+        </div>
+
+        <label class="field-label">المبلغ ($)</label>
+        <input id="deposit-amount" class="field-input" type="number" step="0.1" placeholder="مثال: 5.00" />
+
+        <label class="field-label">رقم العملية / الإشعار</label>
+        <input id="deposit-proof-text" class="field-input" type="text" placeholder="رقم التحويل أو الإشعار" />
+
+        <label class="field-label">رابط صورة الإثبات (اختياري)</label>
+        <input id="deposit-proof-image" class="field-input" type="text" placeholder="https://..." />
+
+        <button class="btn-primary full-width" id="submit-deposit">إرسال طلب الإيداع</button>
+
+        <h4 class="sub-title">سجل إيداعاتك</h4>
+        <div id="user-deposits-list" class="services-list"></div>
+      </div>
+
+      <!-- Section: My Orders -->
+      <div id="user-orders-section" class="user-section hidden">
+        <h3 class="section-title">طلباتي</h3>
+        <div id="user-orders-list" class="services-list"></div>
+      </div>
+
+      <!-- Section: Referral -->
+      <div id="user-referral-section" class="user-section hidden">
+        <h3 class="section-title">👥 نظام الإحالة والمكافآت</h3>
+        <p class="section-desc">شارك الرابط مع أصدقائك واحصل على رصيد مجاني عن كل صديق ينضم وينفذ أول إيداع!</p>
+        
+        <div class="referral-box">
+          <input id="referral-link" class="field-input" readonly value="جاري التحميل..." />
+          <button class="btn-primary" id="copy-ref-link">نسخ الرابط</button>
+        </div>
+      </div>
     </main>
+
+    <!-- Bottom Navigation Bar -->
+    <nav class="bottom-nav">
+      <button class="bnav-btn active" data-user-section="user-store-section">
+        <span class="nav-icon">🏠</span>
+        <span class="nav-text">المتجر</span>
+      </button>
+      <button class="bnav-btn" data-user-section="user-deposit-section">
+        <span class="nav-icon">💳</span>
+        <span class="nav-text">شحن</span>
+      </button>
+      <button class="bnav-btn" data-user-section="user-orders-section">
+        <span class="nav-icon">📦</span>
+        <span class="nav-text">طلباتي</span>
+      </button>
+      <button class="bnav-btn" data-user-section="user-referral-section">
+        <span class="nav-icon">👥</span>
+        <span class="nav-text">الإحالة</span>
+      </button>
+    </nav>
   </div>
 
+  <!-- USER BUY MODAL -->
+  <div id="user-buy-modal" class="modal hidden">
+    <div class="modal-box">
+      <h3 id="buy-modal-service-name">اسم الخدمة</h3>
+      <p id="buy-modal-service-price" class="modal-price">0.00$</p>
+
+      <label class="field-label" id="buy-modal-input-label">معرّف اللاعب / رقم الحساب / الإيميل</label>
+      <input id="buy-player-id" class="field-input" type="text" placeholder="أدخل البيانات المطلوب الشحن لها" />
+
+      <div class="modal-actions">
+        <button class="btn-secondary" id="cancel-buy-modal">إلغاء</button>
+        <button class="btn-primary" id="confirm-buy">تأكيد الشراء</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ADMIN VIEW -->
   <div id="admin-view" class="screen hidden">
     <header class="topbar admin">
       <span class="brand">Zapcharge <span class="admin-tag">إدارة</span></span>
@@ -167,3 +269,4 @@
   <script src="/static/js/app.js"></script>
 </body>
           </html>
+          
