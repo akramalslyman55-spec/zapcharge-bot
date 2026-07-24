@@ -86,6 +86,8 @@ function setupAdminNav(permissions) {
   document.getElementById("open-add-admin").addEventListener("click", () => openAdminModal());
   document.getElementById("cancel-admin-modal").addEventListener("click", closeAdminModal);
   document.getElementById("save-admin").addEventListener("click", saveAdmin);
+
+  document.getElementById("send-broadcast").addEventListener("click", sendBroadcast);
 }
 
 const categoryLabels = {
@@ -550,6 +552,41 @@ async function loadLogs() {
     });
   } catch (err) {
     list.innerHTML = '<p class="placeholder">حدث خطأ أثناء التحميل.</p>';
+  }
+}
+
+async function sendBroadcast() {
+  const message = document.getElementById("broadcast-message").value.trim();
+  const resultEl = document.getElementById("broadcast-result");
+
+  if (!message) {
+    alert("لازم تكتب نص الرسالة");
+    return;
+  }
+
+  if (!confirm("متأكد إنك بدك تبعت هاي الرسالة لكل المستخدمين؟")) return;
+
+  resultEl.textContent = "جاري الإرسال...";
+
+  try {
+    const res = await fetch("/api/admin/broadcast", {
+      method: "POST",
+      headers: adminHeaders({ "Content-Type": "application/json" }),
+      body: JSON.stringify({ message }),
+    });
+    const data = await res.json();
+
+    if (!data.ok) {
+      resultEl.textContent = "حدث خطأ أثناء الإرسال.";
+      return;
+    }
+
+    resultEl.textContent =
+      `تم الإرسال لـ ${data.sent} مستخدم` +
+      (data.failed ? ` (فشل الإرسال لـ ${data.failed})` : "");
+    document.getElementById("broadcast-message").value = "";
+  } catch (err) {
+    resultEl.textContent = "حدث خطأ أثناء الإرسال.";
   }
 }
 
