@@ -1,28 +1,16 @@
 const tg = window.Telegram?.WebApp;
 
+let currentUser = null;
+let allStoreServices = [];
+let selectedServiceToBuy = null;
+
 function show(id) {
   document.querySelectorAll(".screen").forEach((el) => el.classList.add("hidden"));
   document.getElementById(id).classList.remove("hidden");
 }
 
-function showAdminSection(id) {
-  document.querySelectorAll(".admin-section").forEach((el) => el.classList.add("hidden"));
-  document.getElementById(id).classList.remove("hidden");
-
-  document.querySelectorAll(".nav-btn").forEach((btn) => {
-    btn.classList.toggle("active", btn.dataset.adminSection === id);
-  });
-
-  if (id === "admin-services-section") loadServices();
-  if (id === "admin-deposits-section") loadDeposits();
-  if (id === "admin-orders-section") loadOrders();
-  if (id === "admin-admins-section") loadAdmins();
-  if (id === "admin-stats-section") loadStats();
-  if (id === "admin-logs-section") loadLogs();
-}
-
-function adminHeaders(extra = {}) {
-  return { "X-Telegram-Init-Data": tg.initData, ...extra };
+function userHeaders(extra = {}) {
+  return { "X-Telegram-Init-Data": tg?.initData || "", ...extra };
 }
 
 async function init() {
@@ -47,27 +35,297 @@ async function init() {
       return;
     }
 
+    currentUser = data.user;
+
     if (data.is_admin) {
       show("admin-view");
       setupAdminNav(data.permissions);
       loadAdminSummary();
     } else {
-      document.getElementById("store-balance").textContent = data.user.balance.toFixed(2) + "$";
+      updateUserBalanceUI(currentUser.balance);
       show("store-view");
+      setupUserNav();
+      loadStoreServices();
     }
   } catch (err) {
     show("error-view");
   }
 }
 
-async function loadAdminSummary() {
-  try {
-    const res = await fetch("/api/admin/summary", { headers: adminHeaders() });
-    const data = await res.json();
-    document.getElementById("stat-orders").textContent = data.pending_orders;
-    document.getElementById("stat-deposits").textContent = data.pending_deposits;
-  } catch (err) {}
+function updateUserBalanceUI(bal) {
+  if (currentUser) currentUser.balance = bal;
+  document.getElementById("store-balance").textContent = bal.toFixed(2) + "$";
 }
+
+// ==================== USER STORE LOGIC ====================
+
+function setupUserNav() {
+  document.querySelectorAll(".bnav-btn").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const sectionId = btn.dataset.userSection;
+      showUserSection(sectionId);
+    });
+  });
+
+  document.getElementById("topbar-add-funds").addEventListener("click", () => {
+    showUserSection("user-deposit-section");
+  });
+
+  document.querySelectorAll(".cat-btn").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      document.querySelectorAll(".cat-btn").forEach((b) => b.classList.remove("active"));
+      btn.classList.add("active");
+      renderStoreServices(btn.dataset.cat);
+    });
+  });
+
+  document.getElementById("cancel-buy-modal").addEventListener("click", closeBuyModal);
+  document.getElementById("confirm-buy").addEventListener("click", processPurchase);
+
+  document.getElementById("submit-deposit").addEventListener("click", submitDepositRequest);
+  document.getElementById("copy-ref-link").addEventListener("click", copyReferralLink);
+}
+
+function showUserSection(id) {
+  document.querySelectorAll(".user-section").forEach((el) => el.classList.add("hidden"));
+  document.getElementById(id).classList.remove("hidden");
+
+  document.querySelectorAll(".bnav-btn").forEach((btn) => {
+    btn.classList.toggle("active", btn.dataset.userSection === id);
+  });
+
+  if (id === "user-store-section") loadStoreServices();
+  if (id === "user-deposit-section") loadUserDeposits();
+  if (id === "user-orders-section") loadUserOrders();
+  if (id === "user-referral-section") loadReferralInfo();
+}
+
+async function loadStoreServices() {
+  const grid = document.getElementById("user-services-grid");
+  grid.innerHTML = '<p class="placeholder">جاري تحميل الخدمات...</p>';
+
+  try {
+    const res = await fetch("/api/store/services", { headers: userHeaders() });
+    allStoreServices = await res.json();
+
+    const activeCatBtn = document.querySelector(".cat-btn.active");
+    const activeCat = activeCatBtn ? activeCatBtn.dataset.cat : "all";
+    renderStoreServices(activeCat);
+  } catch (err) {
+    grid.innerHTML = '<p class="placeholder">حدث خطأ أثناء تحميل المتجر.</p>';
+  }
+}
+
+function renderStoreServices(category = "all") {
+  const grid = document.getElementById("user-services-grid");
+  
+  const filtered = category === "all" 
+    ? allStoreServices 
+    : allStoreServices.filter((s) => s.category === category);
+
+  if (filtered.length === 0) {
+    grid.innerHTML = '<p class="placeholder">لا توجد خدمات متاحة حالياً بهذا القسم.</p>';
+    return;
+  }
+
+  grid.innerHTML = "";
+  filtered.forEach((s) => {
+    const card = document.createElement("div");
+    card.className = "service-card";
+    card.innerHTML = `
+      <div class="scard-img-box">
+        ${s.image_url ? `<img src="${s.image_url}" alt="${s.name}" class="scard-img" />` : '<div class="scard-icon">⚡</div>'}
+      </div>
+      <div class="scard-details">
+        <h4 class="scard-title">${s.name}</h4>
+        <span class="scard-sub">${s.package_name || ""}</span>
+        <span class="scard-price">${s.price.toFixed(2)}$</span>
+      </div>
+      <button class="btn-primary btn-buy" data-id="${s.id}">شراء</button>
+    `;
+    grid.appendChild(card);
+
+    card.querySelector(".btn-buy").addEventListener("click", () => openBuyModal(s));
+  });
+}
+
+function openBuyModal(service) {
+  selectedServiceToBuy = service;
+  document.getElementById("buy-modal-service-name").textContent = service.name + (service.package_name ? " - " + service.package_name : "");
+  document.getElementById("buy-modal-service-price").textContent = service.price.toFixed(2) + "$";
+  document.getElementById("buy-player-id").value = "";
+  document.getElementById("user-buy-modal").classList.remove("hidden");
+}
+
+function closeBuyModal() {
+  document.getElementById("user-buy-modal").classList.add("hidden");
+  selectedServiceToBuy = null;
+}
+
+async function processPurchase() {
+  if (!selectedServiceToBuy) return;
+
+  const playerId = document.getElementById("buy-player-id").value.trim();
+
+  if (currentUser.balance < selectedServiceToBuy.price) {
+    alert("رصيدك الحالي غير كافٍ. اضغط على شحن لشحن رصيدك أولاً.");
+    closeBuyModal();
+    showUserSection("user-deposit-section");
+    return;
+  }
+
+  try {
+    const res = await fetch("/api/store/order", {
+      method: "POST",
+      headers: userHeaders({ "Content-Type": "application/json" }),
+      body: JSON.stringify({
+        service_id: selectedServiceToBuy.id,
+        player_id: playerId,
+      }),
+    });
+
+    const data = await res.json();
+
+    if (!data.ok) {
+      if (data.error === "insufficient_balance") alert("رصيدك غير كافٍ.");
+      else alert("تعذّر إجراء العملية، جرّب لاحقاً.");
+      return;
+    }
+
+    updateUserBalanceUI(data.new_balance);
+    closeBuyModal();
+    alert("✅ تم إرسال طلب الشراء بنجاح! يمكنك متابعة حالته من تبويب طلباتي.");
+    showUserSection("user-orders-section");
+  } catch (err) {
+    alert("حدث خطأ أثناء الاتصال.");
+  }
+}
+
+async function submitDepositRequest() {
+  const method = document.getElementById("deposit-method").value;
+  const amount = parseFloat(document.getElementById("deposit-amount").value) || 0;
+  const proofText = document.getElementById("deposit-proof-text").value.trim();
+  const proofImage = document.getElementById("deposit-proof-image").value.trim();
+
+  if (amount <= 0) {
+    alert("يرجى إدخال مبلغ صحيح.");
+    return;
+  }
+
+  try {
+    const res = await fetch("/api/store/deposit", {
+      method: "POST",
+      headers: userHeaders({ "Content-Type": "application/json" }),
+      body: JSON.stringify({
+        method,
+        amount,
+        proof_text: proofText,
+        proof_image_url: proofImage,
+      }),
+    });
+
+    const data = await res.json();
+    if (!data.ok) {
+      alert("حدث خطأ في الإرسال.");
+      return;
+    }
+
+    alert("✅ تم إرسال طلب الإيداع. سيتم فحص الطلب وإضافة الرصيد لحسابك بأسرع وقت.");
+    document.getElementById("deposit-amount").value = "";
+    document.getElementById("deposit-proof-text").value = "";
+    document.getElementById("deposit-proof-image").value = "";
+    loadUserDeposits();
+  } catch (err) {
+    alert("حدث خطأ أثناء الإرسال.");
+  }
+}
+
+async function loadUserDeposits() {
+  const list = document.getElementById("user-deposits-list");
+  list.innerHTML = '<p class="placeholder">جاري التحميل...</p>';
+
+  try {
+    const res = await fetch("/api/store/my-deposits", { headers: userHeaders() });
+    const deposits = await res.json();
+
+    if (!Array.isArray(deposits) || deposits.length === 0) {
+      list.innerHTML = '<p class="placeholder">لا توجد لديك طلبات إيداع سابقة.</p>';
+      return;
+    }
+
+    list.innerHTML = "";
+    deposits.forEach((d) => {
+      let statusBadge = '<span class="status-badge pending">قيد الانتظار ⏳</span>';
+      if (d.status === "approved") statusBadge = '<span class="status-badge approved">مقبول ✅</span>';
+      if (d.status === "rejected") statusBadge = `<span class="status-badge rejected">مرفوض ❌ ${d.reject_reason ? " (" + d.reject_reason + ")" : ""}</span>`;
+
+      const row = document.createElement("div");
+      row.className = "service-row";
+      row.innerHTML = `
+        <div class="service-info">
+          <span class="service-name">${d.amount.toFixed(2)}$ — ${d.method}</span>
+          <span class="service-meta">${d.proof_text ? "رقم الإشعار: " + d.proof_text : "طلب عادي"}</span>
+        </div>
+        <div class="service-actions">${statusBadge}</div>
+      `;
+      list.appendChild(row);
+    });
+  } catch (err) {
+    list.innerHTML = '<p class="placeholder">حدث خطأ أثناء التحميل.</p>';
+  }
+}
+
+async function loadUserOrders() {
+  const list = document.getElementById("user-orders-list");
+  list.innerHTML = '<p class="placeholder">جاري التحميل...</p>';
+
+  try {
+    const res = await fetch("/api/store/my-orders", { headers: userHeaders() });
+    const orders = await res.json();
+
+    if (!Array.isArray(orders) || orders.length === 0) {
+      list.innerHTML = '<p class="placeholder">لا توجد طلبات سابقة.</p>';
+      return;
+    }
+
+    list.innerHTML = "";
+    orders.forEach((o) => {
+      let statusBadge = '<span class="status-badge pending">قيد التنفيذ ⏳</span>';
+      if (o.status === "done") statusBadge = '<span class="status-badge approved">مكتمل ✅</span>';
+      if (o.status === "cancelled") statusBadge = `<span class="status-badge rejected">ملغى ❌ ${o.cancel_reason ? " (" + o.cancel_reason + ")" : ""}</span>`;
+
+      const row = document.createElement("div");
+      row.className = "service-row";
+      row.innerHTML = `
+        <div class="service-info">
+          <span class="service-name">${o.service_name}${o.package_name ? " - " + o.package_name : ""}</span>
+          <span class="service-meta">السعر: ${o.price.toFixed(2)}$${o.player_id ? " · " + o.player_id : ""}</span>
+        </div>
+        <div class="service-actions">${statusBadge}</div>
+      `;
+      list.appendChild(row);
+    });
+  } catch (err) {
+    list.innerHTML = '<p class="placeholder">حدث خطأ أثناء التحميل.</p>';
+  }
+}
+
+function loadReferralInfo() {
+  if (currentUser) {
+    const linkInput = document.getElementById("referral-link");
+    const botName = window.Telegram?.WebApp?.initDataUnsafe?.bot_username || "ZapchargeBot";
+    linkInput.value = `https://t.me/${botName}?start=${currentUser.telegram_id}`;
+  }
+}
+
+function copyReferralLink() {
+  const linkInput = document.getElementById("referral-link");
+  linkInput.select();
+  navigator.clipboard.writeText(linkInput.value);
+  alert("📋 تم نسخ رابط الإحالة الخاص بك بنجاح!");
+}
+
+// ==================== ADMIN LOGIC ====================
 
 function setupAdminNav(permissions) {
   document.querySelectorAll(".nav-btn").forEach((btn) => {
@@ -88,6 +346,35 @@ function setupAdminNav(permissions) {
   document.getElementById("save-admin").addEventListener("click", saveAdmin);
 
   document.getElementById("send-broadcast").addEventListener("click", sendBroadcast);
+}
+
+function showAdminSection(id) {
+  document.querySelectorAll(".admin-section").forEach((el) => el.classList.add("hidden"));
+  document.getElementById(id).classList.remove("hidden");
+
+  document.querySelectorAll(".nav-btn").forEach((btn) => {
+    btn.classList.toggle("active", btn.dataset.adminSection === id);
+  });
+
+  if (id === "admin-services-section") loadServices();
+  if (id === "admin-deposits-section") loadDeposits();
+  if (id === "admin-orders-section") loadOrders();
+  if (id === "admin-admins-section") loadAdmins();
+  if (id === "admin-stats-section") loadStats();
+  if (id === "admin-logs-section") loadLogs();
+}
+
+function adminHeaders(extra = {}) {
+  return { "X-Telegram-Init-Data": tg.initData, ...extra };
+}
+
+async function loadAdminSummary() {
+  try {
+    const res = await fetch("/api/admin/summary", { headers: adminHeaders() });
+    const data = await res.json();
+    document.getElementById("stat-orders").textContent = data.pending_orders;
+    document.getElementById("stat-deposits").textContent = data.pending_deposits;
+  } catch (err) {}
 }
 
 const categoryLabels = {
@@ -293,301 +580,4 @@ async function loadOrders() {
 
     list.innerHTML = "";
     orders.forEach((o) => {
-      const row = document.createElement("div");
-      row.className = "service-row";
-      row.innerHTML = `
-        <div class="service-info">
-          <span class="service-name">${o.service_name}${o.package_name ? " — " + o.package_name : ""}</span>
-          <span class="service-meta">مستخدم: ${o.user_telegram_id}${o.player_id ? " · معرّف اللاعب: " + o.player_id : ""} · ${o.price.toFixed(2)}$</span>
-        </div>
-        <div class="service-actions">
-          <button class="icon-btn complete-order">تم التنفيذ</button>
-          <button class="icon-btn danger cancel-order">إلغاء</button>
-        </div>
-      `;
-      list.appendChild(row);
-
-      row.querySelector(".complete-order").addEventListener("click", () => completeOrder(o.id));
-      row.querySelector(".cancel-order").addEventListener("click", () => cancelOrder(o.id));
-    });
-  } catch (err) {
-    list.innerHTML = '<p class="placeholder">حدث خطأ أثناء التحميل.</p>';
-  }
-}
-
-async function completeOrder(id) {
-  if (!confirm("متأكد إنك نفّذت هاد الطلب؟")) return;
-
-  try {
-    const res = await fetch(`/api/admin/orders/${id}/complete`, {
-      method: "POST",
-      headers: adminHeaders(),
-    });
-    const data = await res.json();
-    if (data.ok) loadOrders();
-    else alert("تعذّر تنفيذ العملية.");
-  } catch (err) {}
-}
-
-async function cancelOrder(id) {
-  const reason = prompt("سبب الإلغاء (اختياري):") || "";
-
-  try {
-    const res = await fetch(`/api/admin/orders/${id}/cancel`, {
-      method: "POST",
-      headers: adminHeaders({ "Content-Type": "application/json" }),
-      body: JSON.stringify({ reason }),
-    });
-    const data = await res.json();
-    if (data.ok) loadOrders();
-    else alert("تعذّر إلغاء الطلب.");
-  } catch (err) {}
-}
-
-const permissionLabels = {
-  can_manage_prices: "الأسعار",
-  can_approve_deposits: "الإيداعات",
-  can_fulfill_orders: "الطلبات",
-  can_manage_admins: "المشرفين",
-};
-
-let editingAdminId = null;
-
-async function loadAdmins() {
-  const list = document.getElementById("admins-list");
-  list.innerHTML = '<p class="placeholder">جاري التحميل...</p>';
-
-  try {
-    const res = await fetch("/api/admin/admins", { headers: adminHeaders() });
-    const admins = await res.json();
-
-    if (!Array.isArray(admins) || admins.length === 0) {
-      list.innerHTML = '<p class="placeholder">لا يوجد مشرفين إضافيين بعد.</p>';
-      return;
-    }
-
-    list.innerHTML = "";
-    admins.forEach((a) => {
-      const perms = Object.keys(permissionLabels)
-        .filter((k) => a[k])
-        .map((k) => permissionLabels[k])
-        .join("، ") || "بدون صلاحيات";
-
-      const row = document.createElement("div");
-      row.className = "service-row";
-      row.innerHTML = `
-        <div class="service-info">
-          <span class="service-name">${a.telegram_id}</span>
-          <span class="service-meta">${perms}</span>
-        </div>
-        <div class="service-actions">
-          <button class="icon-btn edit-admin">تعديل</button>
-          <button class="icon-btn danger delete-admin">حذف</button>
-        </div>
-      `;
-      list.appendChild(row);
-
-      row.querySelector(".edit-admin").addEventListener("click", () => openAdminModal(a));
-      row.querySelector(".delete-admin").addEventListener("click", () => deleteAdmin(a.id));
-    });
-  } catch (err) {
-    list.innerHTML = '<p class="placeholder">حدث خطأ أثناء التحميل.</p>';
-  }
-}
-
-function openAdminModal(admin = null) {
-  editingAdminId = admin ? admin.id : null;
-  const idField = document.getElementById("admin-telegram-id");
-  idField.value = admin ? admin.telegram_id : "";
-  idField.disabled = !!admin;
-  document.getElementById("admin-can-prices").checked = admin ? admin.can_manage_prices : false;
-  document.getElementById("admin-can-deposits").checked = admin ? admin.can_approve_deposits : false;
-  document.getElementById("admin-can-orders").checked = admin ? admin.can_fulfill_orders : false;
-  document.getElementById("admin-can-admins").checked = admin ? admin.can_manage_admins : false;
-  document.getElementById("admin-modal").classList.remove("hidden");
-}
-
-function closeAdminModal() {
-  document.getElementById("admin-modal").classList.add("hidden");
-  document.getElementById("admin-telegram-id").disabled = false;
-}
-
-async function saveAdmin() {
-  const body = {
-    can_manage_prices: document.getElementById("admin-can-prices").checked,
-    can_approve_deposits: document.getElementById("admin-can-deposits").checked,
-    can_fulfill_orders: document.getElementById("admin-can-orders").checked,
-    can_manage_admins: document.getElementById("admin-can-admins").checked,
-  };
-
-  if (!editingAdminId) {
-    const telegramId = document.getElementById("admin-telegram-id").value.trim();
-    if (!telegramId) {
-      alert("لازم تكتب آيدي تيليجرام");
-      return;
-    }
-    body.telegram_id = telegramId;
-  }
-
-  try {
-    const url = editingAdminId ? `/api/admin/admins/${editingAdminId}` : "/api/admin/admins";
-    const method = editingAdminId ? "PUT" : "POST";
-
-    const res = await fetch(url, {
-      method,
-      headers: adminHeaders({ "Content-Type": "application/json" }),
-      body: JSON.stringify(body),
-    });
-    const data = await res.json();
-
-    if (!data.ok) {
-      alert(data.error === "already_admin" ? "هاد الآيدي مشرف أصلاً" : "حدث خطأ، جرّب مرة ثانية.");
-      return;
-    }
-
-    closeAdminModal();
-    loadAdmins();
-  } catch (err) {
-    alert("حدث خطأ، جرّب مرة ثانية.");
-  }
-}
-
-async function deleteAdmin(id) {
-  if (!confirm("متأكد إنك بدك تحذف هاد المشرف؟")) return;
-
-  try {
-    const res = await fetch(`/api/admin/admins/${id}`, {
-      method: "DELETE",
-      headers: adminHeaders(),
-    });
-    const data = await res.json();
-    if (data.ok) loadAdmins();
-  } catch (err) {}
-}
-
-async function loadStats() {
-  const container = document.getElementById("stats-content");
-  container.innerHTML = '<p class="placeholder">جاري التحميل...</p>';
-
-  try {
-    const res = await fetch("/api/admin/stats", { headers: adminHeaders() });
-    const s = await res.json();
-
-    container.innerHTML = `
-      <div class="stat-row">
-        <div class="stat-card">
-          <span class="stat-label">إجمالي المبيعات</span>
-          <span class="stat-value">${s.total_sales.toFixed(2)}$</span>
-        </div>
-        <div class="stat-card">
-          <span class="stat-label">طلبات منفّذة</span>
-          <span class="stat-value">${s.completed_orders}</span>
-        </div>
-      </div>
-      <div class="stat-row">
-        <div class="stat-card">
-          <span class="stat-label">طلبات ملغاة</span>
-          <span class="stat-value">${s.cancelled_orders}</span>
-        </div>
-        <div class="stat-card">
-          <span class="stat-label">إجمالي الإيداعات المقبولة</span>
-          <span class="stat-value">${s.total_deposits.toFixed(2)}$</span>
-        </div>
-      </div>
-      <div class="stat-row">
-        <div class="stat-card">
-          <span class="stat-label">إيداعات مقبولة</span>
-          <span class="stat-value">${s.approved_deposits}</span>
-        </div>
-        <div class="stat-card">
-          <span class="stat-label">إيداعات مرفوضة</span>
-          <span class="stat-value">${s.rejected_deposits}</span>
-        </div>
-      </div>
-      <div class="stat-row">
-        <div class="stat-card">
-          <span class="stat-label">إجمالي أرصدة المستخدمين</span>
-          <span class="stat-value">${s.total_balance.toFixed(2)}$</span>
-        </div>
-        <div class="stat-card">
-          <span class="stat-label">عدد المستخدمين</span>
-          <span class="stat-value">${s.total_users}</span>
-        </div>
-      </div>
-    `;
-  } catch (err) {
-    container.innerHTML = '<p class="placeholder">حدث خطأ أثناء التحميل.</p>';
-  }
-}
-
-function formatLogDate(iso) {
-  const d = new Date(iso);
-  return d.toLocaleString("ar-SY", { dateStyle: "short", timeStyle: "short" });
-}
-
-async function loadLogs() {
-  const list = document.getElementById("logs-list");
-  list.innerHTML = '<p class="placeholder">جاري التحميل...</p>';
-
-  try {
-    const res = await fetch("/api/admin/logs", { headers: adminHeaders() });
-    const logs = await res.json();
-
-    if (!Array.isArray(logs) || logs.length === 0) {
-      list.innerHTML = '<p class="placeholder">لا يوجد عمليات مسجّلة بعد.</p>';
-      return;
-    }
-
-    list.innerHTML = "";
-    logs.forEach((l) => {
-      const row = document.createElement("div");
-      row.className = "service-row";
-      row.innerHTML = `
-        <div class="service-info">
-          <span class="service-name">${l.action}${l.details ? " — " + l.details : ""}</span>
-          <span class="service-meta">${l.admin_telegram_id} · ${formatLogDate(l.created_at)}</span>
-        </div>
-      `;
-      list.appendChild(row);
-    });
-  } catch (err) {
-    list.innerHTML = '<p class="placeholder">حدث خطأ أثناء التحميل.</p>';
-  }
-}
-
-async function sendBroadcast() {
-  const message = document.getElementById("broadcast-message").value.trim();
-  const resultEl = document.getElementById("broadcast-result");
-
-  if (!message) {
-    alert("لازم تكتب نص الرسالة");
-    return;
-  }
-
-  if (!confirm("متأكد إنك بدك تبعت هاي الرسالة لكل المستخدمين؟")) return;
-
-  resultEl.textContent = "جاري الإرسال...";
-
-  try {
-    const res = await fetch("/api/admin/broadcast", {
-      method: "POST",
-      headers: adminHeaders({ "Content-Type": "application/json" }),
-      body: JSON.stringify({ message }),
-    });
-    const data = await res.json();
-
-    if (!data.ok) {
-      resultEl.textContent = "حدث خطأ أثناء الإرسال.";
-      return;
-    }
-
-    resultEl.textContent =
-      `تم الإرسال لـ ${data.sent} مستخدم` +
-      (data.failed ? ` (فشل الإرسال لـ ${data.failed})` : "");
-    document.getElementById("broadcast-message").value = "";
-  } catch (err) {
-    resultEl.textContent = "حدث خطأ أثناء الإرسال.";
-  }
-}
-
-init();
+      const row = document.createE
