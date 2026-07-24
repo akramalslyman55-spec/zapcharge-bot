@@ -47,7 +47,7 @@ async function init() {
 
     if (data.is_admin) {
       show("admin-view");
-      setupAdminNav();
+      setupAdminNav(data.permissions);
       loadAdminSummary();
     } else {
       document.getElementById("store-balance").textContent = data.user.balance.toFixed(2) + "$";
@@ -67,8 +67,13 @@ async function loadAdminSummary() {
   } catch (err) {}
 }
 
-function setupAdminNav() {
+function setupAdminNav(permissions) {
   document.querySelectorAll(".nav-btn").forEach((btn) => {
+    const required = btn.dataset.permission;
+    if (required && !permissions[required]) {
+      btn.remove();
+      return;
+    }
     btn.addEventListener("click", () => showAdminSection(btn.dataset.adminSection));
   });
 
@@ -76,7 +81,7 @@ function setupAdminNav() {
   document.getElementById("cancel-service-modal").addEventListener("click", closeServiceModal);
   document.getElementById("save-service").addEventListener("click", saveService);
 
-  document.getElementById("open-add-admin").addEventListener("click", openAdminModal);
+  document.getElementById("open-add-admin").addEventListener("click", () => openAdminModal());
   document.getElementById("cancel-admin-modal").addEventListener("click", closeAdminModal);
   document.getElementById("save-admin").addEventListener("click", saveAdmin);
 }
