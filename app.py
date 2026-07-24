@@ -5,7 +5,7 @@ import json
 from functools import wraps
 from urllib.parse import parse_qsl
 from flask import Flask, request, jsonify, render_template
-from database import db, Admin, User, Service, Order, Deposit
+from database import db, Admin, User, Service, Order, Deposit, OperationLog
 
 BOT_TOKEN = os.environ.get("BOT_TOKEN", "")
 ADMIN_IDS = set(
@@ -95,6 +95,15 @@ def get_permissions(telegram_id: str) -> dict:
     }
 
 
+def log_action(admin_telegram_id: str, action: str, details: str = ""):
+    entry = OperationLog(
+        admin_telegram_id=admin_telegram_id,
+        action=action,
+        details=details,
+    )
+    db.session.add(entry)
+
+
 def require_admin(f):
     @wraps(f)
     def wrapper(*args, **kwargs):
@@ -174,6 +183,53 @@ def admin_summary():
     )
 
 
+@app.route("/api/admin/stats")
+@require_admin
+def admin_stats():
+    total_sales = db.session.query(
+        db.func.coalesce(db.func.sum(Order.price), 0.0)
+    ).filter(Order.status == "done").scalar()
+
+    total_deposits = db.session.query(
+        db.func.coalesce(db.func.sum(Deposit.amount), 0.0)
+    ).filter(Deposit.status == "approved").scalar()
+
+    total_balance = db.session.query(
+        db.func.coalesce(db.func.sum(User.balance), 0.0)
+    ).scalar()
+
+    return jsonify(
+        {
+            "total_sales": total_sales,
+            "completed_orders": Order.query.filter_by(status="done").count(),
+            "cancelled_orders": Order.query.filter_by(status="cancelled").count(),
+            "total_deposits": total_deposits,
+            "approved_deposits": Deposit.query.filter_by(status="approved").count(),
+            "rejected_deposits": Deposit.query.filter_by(status="rejected").count(),
+            "total_balance": total_balance,
+            "total_users": User.query.count(),
+        }
+    )
+
+
+@app.route("/api/admin/logs")
+@require_admin
+def admin_logs():
+    logs = OperationLog.query.order_by(OperationLog.created_at.desc()).limit(100).all()
+    return jsonify(
+        [
+            {
+                "id": l.id,
+                "admin_telegram_id": l.admin_telegram_id,
+                "action": l.action,
+                "details": l.details,
+                "created_at": l.created_at.isoformat(),
+            }
+            for l in logs
+        ]
+    )
+
+
 @app.route("/api/admin/services", methods=["GET"])
 @require_admin
 def list_services():
@@ -205,6 +261,7 @@ def add_service():
         active=bool(body.get("active", True)),
     )
     db.session.add(service)
+    log_action(request.telegram_id, "إضافة خدمة", service.name)
     db.session.commit()
     return jsonify({"ok": True, "id": service.id})
 
@@ -226,6 +283,7 @@ def edit_service(service_id):
         service.image_url = body["image_url"]
     if "active" in body:
         service.active = bool(body["active"])
+    log_action(request.telegram_id, "تعديل خدمة", service.name)
     db.session.commit()
     return jsonify({"ok": True})
 
@@ -234,7 +292,9 @@ def edit_service(service_id):
 @require_permission("can_manage_prices")
 def delete_service(service_id):
     service = Service.query.get_or_404(service_id)
+    name = service.name
     db.session.delete(service)
+    log_action(request.telegram_id, "حذف خدمة", name)
     db.session.commit()
     return jsonify({"ok": True})
 
@@ -269,6 +329,7 @@ def approve_deposit(deposit_id):
 
     user.balance += deposit.amount
     deposit.status = "approved"
+    log_action(request.telegram_id, "قبول إيداع", f"{deposit.amount:.2f}$ - {deposit.user_telegram_id}")
     db.session.commit()
     return jsonify({"ok": True})
 
@@ -283,6 +344,7 @@ def reject_deposit(deposit_id):
     body = request.get_json(silent=True) or {}
     deposit.status = "rejected"
     deposit.reject_reason = body.get("reason", "")
+    log_action(request.telegram_id, "رفض إيداع", f"{deposit.amount:.2f}$ - {deposit.user_telegram_id}")
     db.session.commit()
     return jsonify({"ok": True})
 
@@ -313,6 +375,7 @@ def complete_order(order_id):
         return jsonify({"ok": False, "error": "already_processed"}), 400
 
     order.status = "done"
+    log_action(request.telegram_id, "تنفيذ طلب", f"طلب #{order.id}")
     db.session.commit()
     return jsonify({"ok": True})
 
@@ -332,6 +395,7 @@ def cancel_order(order_id):
 
     order.status = "cancelled"
     order.cancel_reason = body.get("reason", "")
+    log_action(request.telegram_id, "إلغاء طلب", f"طلب #{order.id}")
     db.session.commit()
     return jsonify({"ok": True})
 
@@ -373,6 +437,7 @@ def add_admin():
         can_approve_deposits=bool(body.get("can_approve_deposits", False)),
     )
     db.session.add(admin)
+    log_action(request.telegram_id, "إضافة مشرف", telegram_id)
     db.session.commit()
     return jsonify({"ok": True, "id": admin.id})
 
@@ -390,6 +455,7 @@ def edit_admin(admin_id):
         admin.can_fulfill_orders = bool(body["can_fulfill_orders"])
     if "can_approve_deposits" in body:
         admin.can_approve_deposits = bool(body["can_approve_deposits"])
+    log_action(request.telegram_id, "تعديل صلاحيات مشرف", admin.telegram_id)
     db.session.commit()
     return jsonify({"ok": True})
 
@@ -398,7 +464,9 @@ def edit_admin(admin_id):
 @require_permission("can_manage_admins")
 def delete_admin(admin_id):
     admin = Admin.query.get_or_404(admin_id)
+    tg_id = admin.telegram_id
     db.session.delete(admin)
+    log_action(request.telegram_id, "حذف مشرف", tg_id)
     db.session.commit()
     return jsonify({"ok": True})
 
