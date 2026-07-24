@@ -71,6 +71,30 @@ def has_permission(telegram_id: str, field: str) -> bool:
     return bool(getattr(record, field, False))
 
 
+def get_permissions(telegram_id: str) -> dict:
+    record = get_admin_record(telegram_id)
+    if record == "owner":
+        return {
+            "can_manage_prices": True,
+            "can_approve_deposits": True,
+            "can_fulfill_orders": True,
+            "can_manage_admins": True,
+        }
+    if record is None:
+        return {
+            "can_manage_prices": False,
+            "can_approve_deposits": False,
+            "can_fulfill_orders": False,
+            "can_manage_admins": False,
+        }
+    return {
+        "can_manage_prices": record.can_manage_prices,
+        "can_approve_deposits": record.can_approve_deposits,
+        "can_fulfill_orders": record.can_fulfill_orders,
+        "can_manage_admins": record.can_manage_admins,
+    }
+
+
 def require_admin(f):
     @wraps(f)
     def wrapper(*args, **kwargs):
@@ -128,6 +152,7 @@ def auth():
         {
             "ok": True,
             "is_admin": is_admin,
+            "permissions": get_permissions(telegram_id) if is_admin else None,
             "user": {
                 "telegram_id": telegram_id,
                 "first_name": user.get("first_name", ""),
