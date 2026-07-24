@@ -614,7 +614,7 @@ def add_admin():
 @require_permission("can_manage_admins")
 def edit_admin(admin_id):
     admin = Admin.query.get_or_404(admin_id)
-        body = request.get_json(silent=True) or {}
+    body = request.get_json(silent=True) or {}
     if "can_manage_prices" in body:
         admin.can_manage_prices = bool(body["can_manage_prices"])
     if "can_manage_admins" in body:
@@ -626,6 +626,7 @@ def edit_admin(admin_id):
     log_action(request.telegram_id, "تعديل صلاحيات مشرف", admin.telegram_id)
     db.session.commit()
     return jsonify({"ok": True})
+    
 
 
 @app.route("/api/admin/admins/<int:admin_id>", methods=["DELETE"])
