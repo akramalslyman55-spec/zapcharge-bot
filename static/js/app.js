@@ -1,5 +1,12 @@
 const tg = window.Telegram?.WebApp;
 
+// عدّل هاد الاسم لاسم البوت الفعلي عندك (بدون @) عشان رابط الإحالة يشتغل صح
+const BOT_USERNAME = "ZapchargeBot";
+
+let currentUser = null; // { telegram_id, first_name, username, balance }
+let allServices = [];
+let currentBuyService = null;
+
 function show(id) {
   document.querySelectorAll(".screen").forEach((el) => el.classList.add("hidden"));
   document.getElementById(id).classList.remove("hidden");
@@ -52,12 +59,20 @@ async function init() {
       setupAdminNav(data.permissions);
       loadAdminSummary();
     } else {
-      document.getElementById("store-balance").textContent = data.user.balance.toFixed(2) + "$";
+      currentUser = data.user;
+      updateBalanceDisplay();
       show("store-view");
+      setupStoreNav();
+      loadStoreServices();
     }
   } catch (err) {
     show("error-view");
   }
+}
+
+function updateBalanceDisplay() {
+  if (!currentUser) return;
+  document.getElementById("store-balance").textContent = currentUser.balance.toFixed(2) + "$";
 }
 
 async function loadAdminSummary() {
@@ -82,6 +97,7 @@ function setupAdminNav(permissions) {
   document.getElementById("open-add-service").addEventListener("click", () => openServiceModal());
   document.getElementById("cancel-service-modal").addEventListener("click", closeServiceModal);
   document.getElementById("save-service").addEventListener("click", saveService);
+  document.getElementById("service-pricing-type").addEventListener("change", updateServicePricingGroups);
 
   document.getElementById("open-add-admin").addEventListener("click", () => openAdminModal());
   document.getElementById("cancel-admin-modal").addEventListener("click", closeAdminModal);
@@ -96,6 +112,12 @@ const categoryLabels = {
 };
 
 let editingServiceId = null;
+
+function updateServicePricingGroups() {
+  const type = document.getElementById("service-pricing-type").value;
+  document.getElementById("service-fixed-group").classList.toggle("hidden", type !== "fixed");
+  document.getElementById("service-variable-group").classList.toggle("hidden", type !== "variable");
+}
 
 async function loadServices() {
   const list = document.getElementById("services-list");
@@ -112,12 +134,17 @@ async function loadServices() {
 
     list.innerHTML = "";
     services.forEach((s) => {
+      const priceMeta =
+        s.pricing_type === "variable"
+          ? `${(s.unit_rate || 0).toFixed(4)}$ / ${s.unit_name || "وحدة"}`
+          : `${(s.price || 0).toFixed(2)}$`;
+
       const row = document.createElement("div");
       row.className = "service-row";
       row.innerHTML = `
         <div class="service-info">
           <span class="service-name">${s.name}${s.package_name ? " — " + s.package_name : ""}</span>
-          <span class="service-meta">${categoryLabels[s.category] || s.category} · ${s.price.toFixed(2)}$${s.active ? "" : " · موقوفة"}</span>
+          <span class="service-meta">${categoryLabels[s.category] || s.category} · ${priceMeta}${s.active ? "" : " · موقوفة"}</span>
         </div>
         <div class="service-actions">
           <button class="icon-btn edit-service" data-id="${s.id}">تعديل</button>
@@ -139,9 +166,20 @@ function openServiceModal(service = null) {
   document.getElementById("service-category").value = service ? service.category : "games";
   document.getElementById("service-name").value = service ? service.name : "";
   document.getElementById("service-package").value = service ? (service.package_name || "") : "";
-  document.getElementById("service-price").value = service ? service.price : "";
+
+  const pricingType = service ? (service.pricing_type || "fixed") : "fixed";
+  document.getElementById("service-pricing-type").value = pricingType;
+
+  document.getElementById("service-price").value = service && service.price != null ? service.price : "";
+  document.getElementById("service-unit-name").value = service ? (service.unit_name || "") : "";
+  document.getElementById("service-unit-rate").value = service && service.unit_rate != null ? service.unit_rate : "";
+  document.getElementById("service-min-qty").value = service && service.min_qty != null ? service.min_qty : "";
+  document.getElementById("service-max-qty").value = service && service.max_qty != null ? service.max_qty : "";
+
   document.getElementById("service-image").value = service ? (service.image_url || "") : "";
   document.getElementById("service-active").checked = service ? service.active : true;
+
+  updateServicePricingGroups();
   document.getElementById("service-modal").classList.remove("hidden");
 }
 
@@ -150,11 +188,13 @@ function closeServiceModal() {
 }
 
 async function saveService() {
+  const pricingType = document.getElementById("service-pricing-type").value;
+
   const body = {
     category: document.getElementById("service-category").value,
     name: document.getElementById("service-name").value.trim(),
     package_name: document.getElementById("service-package").value.trim() || null,
-    price: parseFloat(document.getElementById("service-price").value) || 0,
+    pricing_type: pricingType,
     image_url: document.getElementById("service-image").value.trim() || null,
     active: document.getElementById("service-active").checked,
   };
@@ -162,6 +202,22 @@ async function saveService() {
   if (!body.name) {
     alert("لازم تكتب اسم الخدمة");
     return;
+  }
+
+  if (pricingType === "variable") {
+    body.unit_name = document.getElementById("service-unit-name").value.trim() || null;
+    body.unit_rate = parseFloat(document.getElementById("service-unit-rate").value) || 0;
+    const minQty = document.getElementById("service-min-qty").value;
+    const maxQty = document.getElementById("service-max-qty").value;
+    body.min_qty = minQty !== "" ? parseInt(minQty, 10) : null;
+    body.max_qty = maxQty !== "" ? parseInt(maxQty, 10) : null;
+
+    if (!body.unit_name || !body.unit_rate) {
+      alert("لازم تعبّي اسم الوحدة وسعرها للخدمات ذات الكمية الحرة");
+      return;
+    }
+  } else {
+    body.price = parseFloat(document.getElementById("service-price").value) || 0;
   }
 
   try {
@@ -293,12 +349,13 @@ async function loadOrders() {
 
     list.innerHTML = "";
     orders.forEach((o) => {
+      const qtyMeta = o.quantity ? ` · الكمية: ${o.quantity} ${o.unit_name || ""}` : "";
       const row = document.createElement("div");
       row.className = "service-row";
       row.innerHTML = `
         <div class="service-info">
           <span class="service-name">${o.service_name}${o.package_name ? " — " + o.package_name : ""}</span>
-          <span class="service-meta">مستخدم: ${o.user_telegram_id}${o.player_id ? " · معرّف اللاعب: " + o.player_id : ""} · ${o.price.toFixed(2)}$</span>
+          <span class="service-meta">مستخدم: ${o.user_telegram_id}${o.player_id ? " · معرّف: " + o.player_id : ""}${qtyMeta} · ${o.price.toFixed(2)}$</span>
         </div>
         <div class="service-actions">
           <button class="icon-btn complete-order">تم التنفيذ</button>
@@ -511,7 +568,7 @@ async function loadStats() {
         </div>
         <div class="stat-card">
           <span class="stat-label">عدد المستخدمين</span>
-          <span class="stat-value">${s.total_users}</span>
+                  <span class="stat-value">${s.total_users}</span>
         </div>
       </div>
     `;
@@ -590,4 +647,349 @@ async function sendBroadcast() {
   }
 }
 
+// ==================== STORE (CUSTOMER) LOGIC ====================
+
+function userHeaders(extra = {}) {
+  return { "X-Telegram-Init-Data": tg.initData, ...extra };
+}
+
+function setupStoreNav() {
+  // التنقل بالقائمة السفلية
+  document.querySelectorAll(".bnav-btn").forEach((btn) => {
+    btn.addEventListener("click", () => showUserSection(btn.dataset.userSection));
+  });
+
+  // زر "شحن" بأعلى الشاشة
+  document.getElementById("topbar-add-funds").addEventListener("click", () => {
+    showUserSection("user-deposit-section");
+  });
+
+  // فلاتر التصنيفات
+  document.querySelectorAll(".cat-btn").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      document.querySelectorAll(".cat-btn").forEach((b) => b.classList.remove("active"));
+      btn.classList.add("active");
+      renderServicesGrid(btn.dataset.cat);
+    });
+  });
+
+  // مودال الشراء
+  document.getElementById("cancel-buy-modal").addEventListener("click", closeBuyModal);
+  document.getElementById("confirm-buy").addEventListener("click", confirmBuy);
+  document.getElementById("buy-quantity").addEventListener("input", updateBuyModalComputedPrice);
+
+  // نموذج الإيداع
+  document.getElementById("submit-deposit").addEventListener("click", submitDeposit);
+  document.getElementById("deposit-method").addEventListener("change", updateDepositInstructions);
+  updateDepositInstructions();
+
+  // الإحالة
+  document.getElementById("copy-ref-link").addEventListener("click", copyReferralLink);
+}
+
+function showUserSection(id) {
+  document.querySelectorAll(".user-section").forEach((el) => el.classList.add("hidden"));
+  document.getElementById(id).classList.remove("hidden");
+
+  document.querySelectorAll(".bnav-btn").forEach((btn) => {
+    btn.classList.toggle("active", btn.dataset.userSection === id);
+  });
+
+  if (id === "user-deposit-section") loadMyDeposits();
+  if (id === "user-orders-section") loadMyOrders();
+  if (id === "user-referral-section") setupReferralLink();
+}
+
+async function loadStoreServices() {
+  const grid = document.getElementById("user-services-grid");
+  grid.innerHTML = '<p class="placeholder">جاري التحميل...</p>';
+
+  try {
+    const res = await fetch("/api/store/services", { headers: userHeaders() });
+    const services = await res.json();
+
+    allServices = Array.isArray(services) ? services : [];
+    renderServicesGrid("all");
+  } catch (err) {
+    grid.innerHTML = '<p class="placeholder">حدث خطأ أثناء تحميل الخدمات.</p>';
+  }
+}
+
+function renderServicesGrid(category) {
+  const grid = document.getElementById("user-services-grid");
+  const filtered = category === "all" ? allServices : allServices.filter((s) => s.category === category);
+
+  if (filtered.length === 0) {
+    grid.innerHTML = '<p class="placeholder">لا يوجد خدمات بهاد التصنيف حالياً.</p>';
+    return;
+  }
+
+  grid.innerHTML = "";
+  filtered.forEach((s) => {
+    const priceLabel =
+      s.pricing_type === "variable"
+        ? `${(s.unit_rate || 0).toFixed(4)}$ / ${s.unit_name || "وحدة"}`
+        : `${(s.price || 0).toFixed(2)}$`;
+
+    const card = document.createElement("div");
+    card.className = "service-card";
+    card.innerHTML = `
+      <div class="scard-img-box">
+        ${
+          s.image_url
+            ? `<img class="scard-img" src="${s.image_url}" alt="" />`
+            : `<svg class="scard-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/></svg>`
+        }
+      </div>
+      <div class="scard-details">
+        <p class="scard-title">${s.name}</p>
+        ${s.package_name ? `<span class="scard-sub">${s.package_name}</span>` : ""}
+        <span class="scard-price">${priceLabel}</span>
+      </div>
+      <button class="btn-primary btn-buy" data-id="${s.id}">اشتري</button>
+    `;
+    grid.appendChild(card);
+    card.querySelector(".btn-buy").addEventListener("click", () => openBuyModal(s));
+  });
+}
+
+function openBuyModal(service) {
+  currentBuyService = service;
+
+  document.getElementById("buy-modal-service-name").textContent =
+    service.name + (service.package_name ? " — " + service.package_name : "");
+  document.getElementById("buy-player-id").value = "";
+
+  const quantityGroup = document.getElementById("buy-modal-quantity-group");
+  const quantityInput = document.getElementById("buy-quantity");
+  const quantityHint = document.getElementById("buy-quantity-hint");
+  const priceEl = document.getElementById("buy-modal-service-price");
+
+  if (service.pricing_type === "variable") {
+    quantityGroup.classList.remove("hidden");
+    document.getElementById("buy-quantity-label").textContent = `الكمية (${service.unit_name || "وحدة"})`;
+    quantityInput.value = "";
+
+    let hint = `سعر الوحدة: ${(service.unit_rate || 0).toFixed(4)}$`;
+    if (service.min_qty) hint += ` · الحد الأدنى: ${service.min_qty}`;
+    if (service.max_qty) hint += ` · الحد الأقصى: ${service.max_qty}`;
+    quantityHint.textContent = hint;
+
+    priceEl.textContent = "0.00$";
+  } else {
+    quantityGroup.classList.add("hidden");
+    priceEl.textContent = (service.price || 0).toFixed(2) + "$";
+  }
+
+  document.getElementById("user-buy-modal").classList.remove("hidden");
+}
+
+function updateBuyModalComputedPrice() {
+  if (!currentBuyService || currentBuyService.pricing_type !== "variable") return;
+
+  const qty = parseInt(document.getElementById("buy-quantity").value, 10) || 0;
+  const total = qty * (currentBuyService.unit_rate || 0);
+  document.getElementById("buy-modal-service-price").textContent = total.toFixed(2) + "$";
+}
+
+function closeBuyModal() {
+  document.getElementById("user-buy-modal").classList.add("hidden");
+  currentBuyService = null;
+}
+
+async function confirmBuy() {
+  if (!currentBuyService) return;
+
+  const playerId = document.getElementById("buy-player-id").value.trim();
+  if (!playerId) {
+    alert("لازم تدخل المعرّف/البيانات المطلوبة");
+    return;
+  }
+
+  const body = {
+    service_id: currentBuyService.id,
+    player_id: playerId,
+  };
+
+  if (currentBuyService.pricing_type === "variable") {
+    const qty = parseInt(document.getElementById("buy-quantity").value, 10) || 0;
+
+    if (qty <= 0) {
+      alert("لازم تدخل كمية صحيحة");
+      return;
+    }
+    if (currentBuyService.min_qty && qty < currentBuyService.min_qty) {
+      alert(`الحد الأدنى للكمية هو ${currentBuyService.min_qty}`);
+      return;
+    }
+    if (currentBuyService.max_qty && qty > currentBuyService.max_qty) {
+      alert(`الحد الأقصى للكمية هو ${currentBuyService.max_qty}`);
+      return;
+    }
+
+    body.quantity = qty;
+  }
+
+  try {
+    const res = await fetch("/api/store/order", {
+      method: "POST",
+      headers: userHeaders({ "Content-Type": "application/json" }),
+      body: JSON.stringify(body),
+    });
+    const data = await res.json();
+
+    if (!data.ok) {
+      const errorMessages = {
+        insufficient_balance: "رصيدك غير كافي لهاي العملية.",
+        below_min_qty: `الكمية أقل من الحد الأدنى.`,
+        above_max_qty: `الكمية أكبر من الحد الأقصى.`,
+        invalid_quantity: "الكمية المدخلة غير صحيحة.",
+      };
+      alert(errorMessages[data.error] || "حدث خطأ، جرّب مرة ثانية.");
+      return;
+    }
+
+    currentUser.balance = data.new_balance;
+    updateBalanceDisplay();
+    closeBuyModal();
+    alert("تم إرسال طلبك بنجاح! رح ينفّذ قريباً.");
+  } catch (err) {
+    alert("حدث خطأ، جرّب مرة ثانية.");
+  }
+}
+
+async function loadMyOrders() {
+  const list = document.getElementById("user-orders-list");
+  list.innerHTML = '<p class="placeholder">جاري التحميل...</p>';
+
+  try {
+    const res = await fetch("/api/store/my-orders", { headers: userHeaders() });
+    const orders = await res.json();
+
+    if (!Array.isArray(orders) || orders.length === 0) {
+      list.innerHTML = '<p class="placeholder">لا يوجد طلبات بعد.</p>';
+      return;
+    }
+
+    const statusLabels = { pending: "قيد التنفيذ", done: "منفّذ", cancelled: "ملغي" };
+
+    list.innerHTML = "";
+    orders.forEach((o) => {
+      const qtyMeta = o.quantity ? ` · الكمية: ${o.quantity} ${o.unit_name || ""}` : "";
+      const row = document.createElement("div");
+      row.className = "service-row";
+      row.innerHTML = `
+        <div class="service-info">
+          <span class="service-name">${o.service_name}${o.package_name ? " — " + o.package_name : ""}</span>
+          <span class="service-meta">${o.price.toFixed(2)}$${qtyMeta}${o.cancel_reason ? " · السبب: " + o.cancel_reason : ""}</span>
+        </div>
+        <span class="status-badge ${o.status === "done" ? "approved" : o.status === "cancelled" ? "rejected" : "pending"}">
+          ${statusLabels[o.status] || o.status}
+        </span>
+      `;
+      list.appendChild(row);
+    });
+  } catch (err) {
+    list.innerHTML = '<p class="placeholder">حدث خطأ أثناء التحميل.</p>';
+  }
+}
+
+function updateDepositInstructions() {
+  const method = document.getElementById("deposit-method").value;
+  document.getElementById("payment-instructions").textContent =
+    `قم بالتحويل عبر ${methodLabels[method] || method} للحساب المعتمد، ثم أدخل المبلغ ورقم العملية بالأسفل. رح تنراجع الإيداع وتُضاف القيمة لرصيدك بعد القبول.`;
+}
+
+async function submitDeposit() {
+  const method = document.getElementById("deposit-method").value;
+  const amount = parseFloat(document.getElementById("deposit-amount").value) || 0;
+  const proofText = document.getElementById("deposit-proof-text").value.trim();
+  const proofImage = document.getElementById("deposit-proof-image").value.trim();
+
+  if (amount <= 0) {
+    alert("لازم تدخل مبلغ صحيح");
+    return;
+  }
+
+  try {
+    const res = await fetch("/api/store/deposit", {
+      method: "POST",
+      headers: userHeaders({ "Content-Type": "application/json" }),
+      body: JSON.stringify({
+        method,
+        amount,
+        proof_text: proofText,
+        proof_image_url: proofImage,
+      }),
+    });
+    const data = await res.json();
+
+    if (!data.ok) {
+      alert("حدث خطأ، جرّب مرة ثانية.");
+      return;
+    }
+
+    document.getElementById("deposit-amount").value = "";
+    document.getElementById("deposit-proof-text").value = "";
+    document.getElementById("deposit-proof-image").value = "";
+
+    alert("تم إرسال طلب الإيداع، رح ينراجع من الإدارة قريباً.");
+    loadMyDeposits();
+  } catch (err) {
+    alert("حدث خطأ، جرّب مرة ثانية.");
+  }
+}
+
+async function loadMyDeposits() {
+  const list = document.getElementById("user-deposits-list");
+  list.innerHTML = '<p class="placeholder">جاري التحميل...</p>';
+
+  try {
+    const res = await fetch("/api/store/my-deposits", { headers: userHeaders() });
+    const deposits = await res.json();
+
+    if (!Array.isArray(deposits) || deposits.length === 0) {
+      list.innerHTML = '<p class="placeholder">لا يوجد إيداعات بعد.</p>';
+      return;
+    }
+
+    const statusLabels = { pending: "قيد المراجعة", approved: "مقبول", rejected: "مرفوض" };
+
+    list.innerHTML = "";
+    deposits.forEach((d) => {
+      const row = document.createElement("div");
+      row.className = "service-row";
+      row.innerHTML = `
+        <div class="service-info">
+          <span class="service-name">${methodLabels[d.method] || d.method} — ${d.amount.toFixed(2)}$</span>
+          <span class="service-meta">${d.reject_reason ? "السبب: " + d.reject_reason : ""}</span>
+        </div>
+        <span class="status-badge ${d.status}">${statusLabels[d.status] || d.status}</span>
+      `;
+      list.appendChild(row);
+    });
+  } catch (err) {
+    list.innerHTML = '<p class="placeholder">حدث خطأ أثناء التحميل.</p>';
+  }
+}
+
+function setupReferralLink() {
+  if (!currentUser) return;
+  const link = `https://t.me/${BOT_USERNAME}?start=ref_${currentUser.telegram_id}`;
+  document.getElementById("referral-link").value = link;
+}
+
+async function copyReferralLink() {
+  const linkField = document.getElementById("referral-link");
+  try {
+    await navigator.clipboard.writeText(linkField.value);
+    alert("تم نسخ الرابط!");
+  } catch (err) {
+    linkField.select();
+    document.execCommand("copy");
+    alert("تم نسخ الرابط!");
+  }
+}
+
 init();
+      
