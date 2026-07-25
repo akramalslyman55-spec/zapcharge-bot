@@ -216,7 +216,12 @@ def store_services():
             "category": s.category,
             "name": s.name,
             "package_name": s.package_name,
+            "pricing_type": s.pricing_type,
             "price": s.price,
+            "unit_name": s.unit_name,
+            "unit_rate": s.unit_rate,
+            "min_qty": s.min_qty,
+            "max_qty": s.max_qty,
             "image_url": s.image_url,
         }
         for s in services
@@ -241,15 +246,42 @@ def store_order():
     if not user:
         return jsonify({"ok": False, "error": "user_not_found"}), 404
 
-    if user.balance < service.price:
+    quantity = None
+
+    if service.pricing_type == "variable":
+        try:
+            quantity = int(body.get("quantity", 0))
+        except (ValueError, TypeError):
+            quantity = 0
+
+        if quantity <= 0:
+            return jsonify({"ok": False, "error": "invalid_quantity"}), 400
+
+        if service.min_qty and quantity < service.min_qty:
+            return jsonify({"ok": False, "error": "below_min_qty", "min_qty": service.min_qty}), 400
+
+        if service.max_qty and quantity > service.max_qty:
+            return jsonify({"ok": False, "error": "above_max_qty", "max_qty": service.max_qty}), 400
+
+        if not service.unit_rate:
+            return jsonify({"ok": False, "error": "service_misconfigured"}), 400
+
+        final_price = round(quantity * service.unit_rate, 2)
+    else:
+        if service.price is None:
+            return jsonify({"ok": False, "error": "service_misconfigured"}), 400
+        final_price = service.price
+
+    if user.balance < final_price:
         return jsonify({"ok": False, "error": "insufficient_balance"}), 400
 
-    user.balance -= service.price
+    user.balance -= final_price
     order = Order(
         user_telegram_id=request.telegram_id,
         service_id=service.id,
         player_id=player_id,
-        price=service.price,
+        quantity=quantity,
+        price=final_price,
         status="pending"
     )
     db.session.add(order)
@@ -270,6 +302,8 @@ def store_my_orders():
             "service_name": service.name if service else "خدمة محذوفة",
             "package_name": service.package_name if service else None,
             "player_id": o.player_id,
+            "quantity": o.quantity,
+            "unit_name": service.unit_name if service else None,
             "price": o.price,
             "status": o.status,
             "cancel_reason": o.cancel_reason,
@@ -396,7 +430,12 @@ def list_services():
             "category": s.category,
             "name": s.name,
             "package_name": s.package_name,
+            "pricing_type": s.pricing_type,
             "price": s.price,
+            "unit_name": s.unit_name,
+            "unit_rate": s.unit_rate,
+            "min_qty": s.min_qty,
+            "max_qty": s.max_qty,
             "image_url": s.image_url,
             "active": s.active,
         }
@@ -408,14 +447,32 @@ def list_services():
 @require_permission("can_manage_prices")
 def add_service():
     body = request.get_json(silent=True) or {}
+    pricing_type = body.get("pricing_type", "fixed")
+    if pricing_type not in ("fixed", "variable"):
+        pricing_type = "fixed"
+
     service = Service(
         category=body.get("category", ""),
         name=body.get("name", ""),
         package_name=body.get("package_name"),
-        price=float(body.get("price", 0)),
+        pricing_type=pricing_type,
         image_url=body.get("image_url"),
         active=bool(body.get("active", True)),
     )
+
+    if pricing_type == "variable":
+        service.price = None
+        service.unit_name = body.get("unit_name") or None
+        service.unit_rate = float(body.get("unit_rate", 0)) if body.get("unit_rate") not in (None, "") else None
+        service.min_qty = int(body.get("min_qty")) if body.get("min_qty") not in (None, "") else None
+        service.max_qty = int(body.get("max_qty")) if body.get("max_qty") not in (None, "") else None
+    else:
+        service.price = float(body.get("price", 0))
+        service.unit_name = None
+        service.unit_rate = None
+        service.min_qty = None
+        service.max_qty = None
+
     db.session.add(service)
     log_action(request.telegram_id, "إضافة خدمة", service.name)
     db.session.commit()
@@ -427,18 +484,42 @@ def add_service():
 def edit_service(service_id):
     service = Service.query.get_or_404(service_id)
     body = request.get_json(silent=True) or {}
+
     if "category" in body:
         service.category = body["category"]
     if "name" in body:
         service.name = body["name"]
     if "package_name" in body:
         service.package_name = body["package_name"]
-    if "price" in body:
-        service.price = float(body["price"])
     if "image_url" in body:
         service.image_url = body["image_url"]
     if "active" in body:
         service.active = bool(body["active"])
+
+    if "pricing_type" in body:
+        pricing_type = body["pricing_type"]
+        if pricing_type not in ("fixed", "variable"):
+            pricing_type = "fixed"
+        service.pricing_type = pricing_type
+
+    if service.pricing_type == "variable":
+        if "unit_name" in body:
+            service.unit_name = body.get("unit_name") or None
+        if "unit_rate" in body:
+            service.unit_rate = float(body["unit_rate"]) if body.get("unit_rate") not in (None, "") else None
+        if "min_qty" in body:
+            service.min_qty = int(body["min_qty"]) if body.get("min_qty") not in (None, "") else None
+        if "max_qty" in body:
+            service.max_qty = int(body["max_qty"]) if body.get("max_qty") not in (None, "") else None
+        service.price = None
+    else:
+        if "price" in body:
+            service.price = float(body["price"])
+        service.unit_name = None
+        service.unit_rate = None
+        service.min_qty = None
+        service.max_qty = None
+
     log_action(request.telegram_id, "تعديل خدمة", service.name)
     db.session.commit()
     return jsonify({"ok": True})
@@ -523,6 +604,23 @@ def list_orders():
             "service_name": service.name if service else "خدمة محذوفة",
             "package_name": service.package_name if service else None,
             "player_id": o.player_id,
+            "quantity": o.quantity,
+            "unit_name": service.unit_name if service else None,
+            "price": o.price,
+        })
+    return jsonifdef list_orders():
+    orders = Order.query.filter_by(status="pending").order_by(Order.created_at.desc()).all()
+    result = []
+    for o in orders:
+        service = Service.query.get(o.service_id)
+        result.append({
+            "id": o.id,
+            "user_telegram_id": o.user_telegram_id,
+            "service_name": service.name if service else "خدمة محذوفة",
+            "package_name": service.package_name if service else None,
+            "player_id": o.player_id,
+            "quantity": o.quantity,
+            "unit_name": service.unit_name if service else None,
             "price": o.price,
         })
     return jsonify(result)
@@ -626,7 +724,6 @@ def edit_admin(admin_id):
     log_action(request.telegram_id, "تعديل صلاحيات مشرف", admin.telegram_id)
     db.session.commit()
     return jsonify({"ok": True})
-    
 
 
 @app.route("/api/admin/admins/<int:admin_id>", methods=["DELETE"])
