@@ -216,6 +216,31 @@ html, body {
 }
 
 /* =========================================================
+   ICONS — inline SVG replacing emoji everywhere
+   ========================================================= */
+
+.nav-icon svg,
+.cat-icon svg,
+.btn-icon svg,
+.title-icon svg {
+  display: block;
+  fill: none;
+  stroke: currentColor;
+}
+
+.nav-icon svg { width: 21px; height: 21px; }
+.cat-icon svg { width: 15px; height: 15px; }
+.btn-icon svg { width: 14px; height: 14px; }
+.title-icon svg { width: 17px; height: 17px; }
+
+.title-icon {
+  display: inline-flex;
+  vertical-align: -3px;
+  margin-left: 6px;
+  color: var(--accent);
+}
+
+/* =========================================================
    STORE (CUSTOMER) VIEW — wallet-style home screen
    ========================================================= */
 
@@ -250,6 +275,9 @@ html, body {
   border-radius: 16px;
 }
 #store-view .btn-top-add {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
   background: #fff;
   color: var(--accent-dim);
   border: none;
@@ -273,6 +301,9 @@ html, body {
 }
 .category-pills::-webkit-scrollbar { display: none; }
 .cat-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
   flex-shrink: 0;
   background: var(--surface);
   border: 1px solid var(--border);
@@ -316,7 +347,7 @@ html, body {
   justify-content: center;
 }
 .scard-img { width: 100%; height: 100%; object-fit: cover; }
-.scard-icon { font-size: 20px; color: var(--text-dim); }
+.scard-icon { width: 22px; height: 22px; color: var(--text-dim); }
 .scard-details { display: flex; flex-direction: column; gap: 2px; }
 .scard-title { font-size: 13.5px; font-weight: 700; margin: 0; }
 .scard-sub { font-size: 11.5px; color: var(--text-dim); }
@@ -329,7 +360,7 @@ html, body {
   width: 100%;
 }
 
-.section-title { font-size: 16px; font-weight: 700; margin: 4px 0 14px; }
+.section-title { display: flex; align-items: center; font-size: 16px; font-weight: 700; margin: 4px 0 14px; }
 .sub-title { font-size: 14px; font-weight: 700; margin: 22px 0 10px; color: var(--text-dim); }
 .section-desc { font-size: 13px; color: var(--text-dim); line-height: 1.7; margin: -4px 0 16px; }
 
@@ -384,6 +415,7 @@ html, body {
   padding: 6px 4px;
   cursor: pointer;
 }
-.bnav-btn .nav-icon { font-size: 18px; line-height: 1; opacity: 0.75; }
+.bnav-btn .nav-icon { display: flex; opacity: 0.75; }
 .bnav-btn.active { color: var(--accent); }
 .bnav-btn.active .nav-icon { opacity: 1; }
+  
