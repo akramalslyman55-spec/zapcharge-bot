@@ -19,7 +19,20 @@ class Service(db.Model):
     category = db.Column(db.String(64))
     name = db.Column(db.String(128))
     package_name = db.Column(db.String(128), nullable=True)
-    price = db.Column(db.Float)
+
+    # نوع التسعير: "fixed" = باقة بسعر ثابت (زي الألعاب)
+    #              "variable" = كمية حرة يكتبها الزبون وبينحسب سعرها بمعدّل (زي كونزات تطبيقات التواصل)
+    pricing_type = db.Column(db.String(16), default="fixed", nullable=False)
+
+    # يُستخدم فقط إذا pricing_type == "fixed"
+    price = db.Column(db.Float, nullable=True)
+
+    # تُستخدم فقط إذا pricing_type == "variable"
+    unit_name = db.Column(db.String(32), nullable=True)   # مثال: "كونزة"
+    unit_rate = db.Column(db.Float, nullable=True)         # سعر الوحدة الواحدة بالدولار
+    min_qty = db.Column(db.Integer, nullable=True)
+    max_qty = db.Column(db.Integer, nullable=True)
+
     image_url = db.Column(db.String(256), nullable=True)
     active = db.Column(db.Boolean, default=True)
 
@@ -29,6 +42,10 @@ class Order(db.Model):
     user_telegram_id = db.Column(db.String(32))
     service_id = db.Column(db.Integer, db.ForeignKey("service.id"))
     player_id = db.Column(db.String(128), nullable=True)
+
+    # الكمية المدخلة من الزبون (تُملأ فقط للخدمات من نوع variable)
+    quantity = db.Column(db.Integer, nullable=True)
+
     price = db.Column(db.Float)
     status = db.Column(db.String(16), default="pending")
     cancel_reason = db.Column(db.String(256), nullable=True)
@@ -62,3 +79,4 @@ class OperationLog(db.Model):
     action = db.Column(db.String(64))
     details = db.Column(db.String(256), nullable=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    
