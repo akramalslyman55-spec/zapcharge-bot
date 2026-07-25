@@ -608,21 +608,6 @@ def list_orders():
             "unit_name": service.unit_name if service else None,
             "price": o.price,
         })
-    return jsonifdef list_orders():
-    orders = Order.query.filter_by(status="pending").order_by(Order.created_at.desc()).all()
-    result = []
-    for o in orders:
-        service = Service.query.get(o.service_id)
-        result.append({
-            "id": o.id,
-            "user_telegram_id": o.user_telegram_id,
-            "service_name": service.name if service else "خدمة محذوفة",
-            "package_name": service.package_name if service else None,
-            "player_id": o.player_id,
-            "quantity": o.quantity,
-            "unit_name": service.unit_name if service else None,
-            "price": o.price,
-        })
     return jsonify(result)
 
 
