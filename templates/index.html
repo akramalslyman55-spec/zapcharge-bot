@@ -23,7 +23,10 @@
       <span class="brand">Zapcharge</span>
       <div class="user-pill-container">
         <span class="balance-pill" id="store-balance">0.00$</span>
-        <button class="btn-top-add" id="topbar-add-funds">➕ شحن</button>
+        <button class="btn-top-add" id="topbar-add-funds">
+          <span class="btn-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg></span>
+          شحن
+        </button>
       </div>
     </header>
 
@@ -31,13 +34,31 @@
       <!-- Section: Catalog / Store Services -->
       <div id="user-store-section" class="user-section">
         <div class="category-pills" id="category-filters">
-          <button class="cat-btn active" data-cat="all">الكل</button>
-          <button class="cat-btn" data-cat="games">🎮 ألعاب</button>
-          <button class="cat-btn" data-cat="subscriptions">💎 اشتراكات</button>
-          <button class="cat-btn" data-cat="apps">📱 تطبيقات</button>
-          <button class="cat-btn" data-cat="cards">💳 بطاقات</button>
-          <button class="cat-btn" data-cat="recharge">📲 تعبئة</button>
-          <button class="cat-btn" data-cat="bills">🧾 فواتير</button>
+          <button class="cat-btn active" data-cat="all"><span>الكل</span></button>
+          <button class="cat-btn" data-cat="games">
+            <span class="cat-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="6" y1="12" x2="10" y2="12"/><line x1="8" y1="10" x2="8" y2="14"/><circle cx="15" cy="13" r="1"/><circle cx="18" cy="11" r="1"/><rect x="2" y="6" width="20" height="12" rx="4"/></svg></span>
+            <span>ألعاب</span>
+          </button>
+          <button class="cat-btn" data-cat="subscriptions">
+            <span class="cat-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3h12l4 6-10 12L2 9Z"/><path d="M11 3 8 9l4 12 4-12-3-6"/><path d="M2 9h20"/></svg></span>
+            <span>اشتراكات</span>
+          </button>
+          <button class="cat-btn" data-cat="apps">
+            <span class="cat-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="2" width="14" height="20" rx="2"/><line x1="12" y1="18" x2="12.01" y2="18"/></svg></span>
+            <span>تطبيقات</span>
+          </button>
+          <button class="cat-btn" data-cat="cards">
+            <span class="cat-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="1" y="4" width="22" height="16" rx="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg></span>
+            <span>بطاقات</span>
+          </button>
+          <button class="cat-btn" data-cat="recharge">
+            <span class="cat-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg></span>
+            <span>تعبئة</span>
+          </button>
+          <button class="cat-btn" data-cat="bills">
+            <span class="cat-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><line x1="10" y1="9" x2="8" y2="9"/></svg></span>
+            <span>فواتير</span>
+          </button>
         </div>
 
         <div id="user-services-grid" class="services-grid"></div>
@@ -46,7 +67,7 @@
       <!-- Section: Deposit Funds -->
       <div id="user-deposit-section" class="user-section hidden">
         <h3 class="section-title">طلب إيداع رصيد</h3>
-        
+
         <label class="field-label">طريقة الدفع</label>
         <select id="deposit-method" class="field-input">
           <option value="sham_cash">شام كاش (Sham Cash)</option>
@@ -81,9 +102,12 @@
 
       <!-- Section: Referral -->
       <div id="user-referral-section" class="user-section hidden">
-        <h3 class="section-title">👥 نظام الإحالة والمكافآت</h3>
+        <h3 class="section-title">
+          <span class="title-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg></span>
+          نظام الإحالة والمكافآت
+        </h3>
         <p class="section-desc">شارك الرابط مع أصدقائك واحصل على رصيد مجاني عن كل صديق ينضم وينفذ أول إيداع!</p>
-        
+
         <div class="referral-box">
           <input id="referral-link" class="field-input" readonly value="جاري التحميل..." />
           <button class="btn-primary" id="copy-ref-link">نسخ الرابط</button>
@@ -94,19 +118,19 @@
     <!-- Bottom Navigation Bar -->
     <nav class="bottom-nav">
       <button class="bnav-btn active" data-user-section="user-store-section">
-        <span class="nav-icon">🏠</span>
+        <span class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg></span>
         <span class="nav-text">المتجر</span>
       </button>
       <button class="bnav-btn" data-user-section="user-deposit-section">
-        <span class="nav-icon">💳</span>
+        <span class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="1" y="4" width="22" height="16" rx="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg></span>
         <span class="nav-text">شحن</span>
       </button>
       <button class="bnav-btn" data-user-section="user-orders-section">
-        <span class="nav-icon">📦</span>
+        <span class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="M3.3 7 12 12l8.7-5"/><path d="M12 22V12"/></svg></span>
         <span class="nav-text">طلباتي</span>
       </button>
       <button class="bnav-btn" data-user-section="user-referral-section">
-        <span class="nav-icon">👥</span>
+        <span class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg></span>
         <span class="nav-text">الإحالة</span>
       </button>
     </nav>
@@ -268,5 +292,4 @@
 
   <script src="/static/js/app.js"></script>
 </body>
-          </html>
-          
+</html>
