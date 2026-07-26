@@ -105,6 +105,8 @@ function setupAdminNav(permissions) {
     document.getElementById("service-image-file").click();
   });
   document.getElementById("service-image-file").addEventListener("change", handleImageUpload);
+  document.getElementById("service-min-qty").addEventListener("input", recalcUnitRateFromMin);
+  document.getElementById("service-min-price").addEventListener("input", recalcUnitRateFromMin);
 
   document.getElementById("open-add-admin").addEventListener("click", () => openAdminModal());
   document.getElementById("cancel-admin-modal").addEventListener("click", closeAdminModal);
@@ -124,6 +126,19 @@ function updateServicePricingGroups() {
   const type = document.getElementById("service-pricing-type").value;
   document.getElementById("service-fixed-group").classList.toggle("hidden", type !== "fixed");
   document.getElementById("service-variable-group").classList.toggle("hidden", type !== "variable");
+}
+
+function recalcUnitRateFromMin() {
+  const minQty = parseFloat(document.getElementById("service-min-qty").value);
+  const minPrice = parseFloat(document.getElementById("service-min-price").value);
+
+  if (!minQty || minQty <= 0 || !minPrice || minPrice <= 0) {
+    document.getElementById("service-unit-rate").value = "";
+    return;
+  }
+
+  const rate = minPrice / minQty;
+  document.getElementById("service-unit-rate").value = rate.toFixed(6);
 }
 
 async function handleImageUpload(event) {
@@ -217,9 +232,15 @@ function openServiceModal(service = null) {
 
   document.getElementById("service-price").value = service && service.price != null ? service.price : "";
   document.getElementById("service-unit-name").value = service ? (service.unit_name || "") : "";
-  document.getElementById("service-unit-rate").value = service && service.unit_rate != null ? service.unit_rate : "";
   document.getElementById("service-min-qty").value = service && service.min_qty != null ? service.min_qty : "";
   document.getElementById("service-max-qty").value = service && service.max_qty != null ? service.max_qty : "";
+
+  if (service && service.unit_rate != null && service.min_qty) {
+    document.getElementById("service-min-price").value = (service.unit_rate * service.min_qty).toFixed(4);
+  } else {
+    document.getElementById("service-min-price").value = "";
+  }
+  document.getElementById("service-unit-rate").value = service && service.unit_rate != null ? service.unit_rate : "";
 
   document.getElementById("service-image").value = service ? (service.image_url || "") : "";
   document.getElementById("service-active").checked = service ? service.active : true;
@@ -262,6 +283,8 @@ async function saveService() {
   }
 
   if (pricingType === "variable") {
+    recalcUnitRateFromMin();
+
     body.unit_name = document.getElementById("service-unit-name").value.trim() || null;
     body.unit_rate = parseFloat(document.getElementById("service-unit-rate").value) || 0;
     const minQty = document.getElementById("service-min-qty").value;
@@ -269,8 +292,8 @@ async function saveService() {
     body.min_qty = minQty !== "" ? parseInt(minQty, 10) : null;
     body.max_qty = maxQty !== "" ? parseInt(maxQty, 10) : null;
 
-    if (!body.unit_name || !body.unit_rate) {
-      alert("لازم تعبّي اسم الوحدة وسعرها للخدمات ذات الكمية الحرة");
+    if (!body.unit_name || !body.min_qty || !body.unit_rate) {
+      alert("لازم تعبّي اسم الوحدة، الحد الأدنى للكمية، وسعر هاي الكمية");
       return;
     }
   } else {
