@@ -1,7 +1,3 @@
-window.onerror = function (msg, url, line) {
-  alert("خطأ جافاسكريبت: " + msg + " — بالسطر: " + line);
-};
-
 const tg = window.Telegram?.WebApp;
 
 // عدّل هاد الاسم لاسم البوت الفعلي عندك (بدون @) عشان رابط الإحالة يشتغل صح
@@ -580,7 +576,9 @@ async function deleteAdmin(id) {
     });
     const data = await res.json();
     if (data.ok) loadAdmins();
-  } 
+  } catch (err) {}
+}
+
 async function loadStats() {
   const container = document.getElementById("stats-content");
   container.innerHTML = '<p class="placeholder">جاري التحميل...</p>';
@@ -1122,4 +1120,3 @@ async function copyReferralLink() {
 }
 
 init();
-            
