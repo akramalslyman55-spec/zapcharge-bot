@@ -3,6 +3,9 @@ const tg = window.Telegram?.WebApp;
 // عدّل هاد الاسم لاسم البوت الفعلي عندك (بدون @) عشان رابط الإحالة يشتغل صح
 const BOT_USERNAME = "ZapchargeBot";
 
+// مفتاح imgbb لرفع صور الخدمات مباشرة من الجهاز
+const IMGBB_API_KEY = "42b366412bbf0a1fa2e013b7e01ec53a";
+
 let currentUser = null; // { telegram_id, first_name, username, balance }
 let allServices = [];
 let currentBuyService = null;
@@ -98,6 +101,10 @@ function setupAdminNav(permissions) {
   document.getElementById("cancel-service-modal").addEventListener("click", closeServiceModal);
   document.getElementById("save-service").addEventListener("click", saveService);
   document.getElementById("service-pricing-type").addEventListener("change", updateServicePricingGroups);
+  document.getElementById("upload-image-btn").addEventListener("click", () => {
+    document.getElementById("service-image-file").click();
+  });
+  document.getElementById("service-image-file").addEventListener("change", handleImageUpload);
 
   document.getElementById("open-add-admin").addEventListener("click", () => openAdminModal());
   document.getElementById("cancel-admin-modal").addEventListener("click", closeAdminModal);
@@ -117,6 +124,44 @@ function updateServicePricingGroups() {
   const type = document.getElementById("service-pricing-type").value;
   document.getElementById("service-fixed-group").classList.toggle("hidden", type !== "fixed");
   document.getElementById("service-variable-group").classList.toggle("hidden", type !== "variable");
+}
+
+async function handleImageUpload(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+
+  const statusEl = document.getElementById("upload-status");
+  const previewEl = document.getElementById("service-image-preview");
+
+  statusEl.textContent = "جاري رفع الصورة...";
+  statusEl.classList.remove("hidden");
+
+  try {
+    const formData = new FormData();
+    formData.append("key", IMGBB_API_KEY);
+    formData.append("image", file);
+
+    const res = await fetch("https://api.imgbb.com/1/upload", {
+      method: "POST",
+      body: formData,
+    });
+    const data = await res.json();
+
+    if (!data.success) {
+      statusEl.textContent = "فشل رفع الصورة، جرّب مرة ثانية.";
+      return;
+    }
+
+    const url = data.data.url;
+    document.getElementById("service-image").value = url;
+    previewEl.src = url;
+    previewEl.classList.remove("hidden");
+    statusEl.textContent = "تم رفع الصورة بنجاح ✓";
+  } catch (err) {
+    statusEl.textContent = "فشل رفع الصورة، تأكد من الاتصال بالإنترنت.";
+  } finally {
+    event.target.value = "";
+  }
 }
 
 async function loadServices() {
@@ -178,6 +223,18 @@ function openServiceModal(service = null) {
 
   document.getElementById("service-image").value = service ? (service.image_url || "") : "";
   document.getElementById("service-active").checked = service ? service.active : true;
+
+  const previewEl = document.getElementById("service-image-preview");
+  const statusEl = document.getElementById("upload-status");
+  statusEl.classList.add("hidden");
+  statusEl.textContent = "";
+  if (service && service.image_url) {
+    previewEl.src = service.image_url;
+    previewEl.classList.remove("hidden");
+  } else {
+    previewEl.classList.add("hidden");
+    previewEl.src = "";
+  }
 
   updateServicePricingGroups();
   document.getElementById("service-modal").classList.remove("hidden");
@@ -519,9 +576,7 @@ async function deleteAdmin(id) {
     });
     const data = await res.json();
     if (data.ok) loadAdmins();
-  } catch (err) {}
-}
-
+  } 
 async function loadStats() {
   const container = document.getElementById("stats-content");
   container.innerHTML = '<p class="placeholder">جاري التحميل...</p>';
@@ -568,7 +623,7 @@ async function loadStats() {
         </div>
         <div class="stat-card">
           <span class="stat-label">عدد المستخدمين</span>
-                  <span class="stat-value">${s.total_users}</span>
+          <span class="stat-value">${s.total_users}</span>
         </div>
       </div>
     `;
@@ -673,6 +728,9 @@ function setupStoreNav() {
     });
   });
 
+  // مودال اختيار الباقة
+  document.getElementById("cancel-package-select").addEventListener("click", closePackageSelectModal);
+
   // مودال الشراء
   document.getElementById("cancel-buy-modal").addEventListener("click", closeBuyModal);
   document.getElementById("confirm-buy").addEventListener("click", confirmBuy);
@@ -715,6 +773,16 @@ async function loadStoreServices() {
   }
 }
 
+function groupServicesByName(list) {
+  const groups = {};
+  list.forEach((s) => {
+    const key = s.name;
+    if (!groups[key]) groups[key] = [];
+    groups[key].push(s);
+  });
+  return groups;
+}
+
 function renderServicesGrid(category) {
   const grid = document.getElementById("user-services-grid");
   const filtered = category === "all" ? allServices : allServices.filter((s) => s.category === category);
@@ -724,33 +792,91 @@ function renderServicesGrid(category) {
     return;
   }
 
+  const groups = groupServicesByName(filtered);
   grid.innerHTML = "";
-  filtered.forEach((s) => {
-    const priceLabel =
-      s.pricing_type === "variable"
-        ? `${(s.unit_rate || 0).toFixed(4)}$ / ${s.unit_name || "وحدة"}`
-        : `${(s.price || 0).toFixed(2)}$`;
+
+  Object.keys(groups).forEach((name) => {
+    const group = groups[name];
+    const representative = group.find((s) => s.image_url) || group[0];
+
+    let priceLabel;
+    let subLabel;
+
+    if (group.length > 1) {
+      const prices = group.map((s) => (s.pricing_type === "variable" ? (s.unit_rate || 0) : (s.price || 0)));
+      const min = Math.min(...prices);
+      const max = Math.max(...prices);
+      priceLabel = min === max ? `${min.toFixed(2)}$` : `من ${min.toFixed(2)}$`;
+      subLabel = `${group.length} باقات متاحة`;
+    } else {
+      const s = group[0];
+      priceLabel =
+        s.pricing_type === "variable"
+          ? `${(s.unit_rate || 0).toFixed(4)}$ / ${s.unit_name || "وحدة"}`
+          : `${(s.price || 0).toFixed(2)}$`;
+      subLabel = s.package_name || "";
+    }
 
     const card = document.createElement("div");
     card.className = "service-card";
     card.innerHTML = `
       <div class="scard-img-box">
         ${
-          s.image_url
-            ? `<img class="scard-img" src="${s.image_url}" alt="" />`
+          representative.image_url
+            ? `<img class="scard-img" src="${representative.image_url}" alt="" />`
             : `<svg class="scard-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/></svg>`
         }
       </div>
       <div class="scard-details">
-        <p class="scard-title">${s.name}</p>
-        ${s.package_name ? `<span class="scard-sub">${s.package_name}</span>` : ""}
+        <p class="scard-title">${name}</p>
+        ${subLabel ? `<span class="scard-sub">${subLabel}</span>` : ""}
         <span class="scard-price">${priceLabel}</span>
       </div>
-      <button class="btn-primary btn-buy" data-id="${s.id}">اشتري</button>
+      <button class="btn-primary btn-buy">اشتري</button>
     `;
     grid.appendChild(card);
-    card.querySelector(".btn-buy").addEventListener("click", () => openBuyModal(s));
+
+    card.querySelector(".btn-buy").addEventListener("click", () => {
+      if (group.length > 1) {
+        openPackageSelectModal(name, group);
+      } else {
+        openBuyModal(group[0]);
+      }
+    });
   });
+}
+
+function openPackageSelectModal(name, services) {
+  document.getElementById("package-select-title").textContent = name;
+  const list = document.getElementById("package-select-list");
+  list.innerHTML = "";
+
+  services.forEach((s) => {
+    const priceLabel =
+      s.pricing_type === "variable"
+        ? `${(s.unit_rate || 0).toFixed(4)}$ / ${s.unit_name || "وحدة"}`
+        : `${(s.price || 0).toFixed(2)}$`;
+
+    const row = document.createElement("div");
+    row.className = "service-row package-row";
+    row.innerHTML = `
+      <div class="service-info">
+        <span class="service-name">${s.package_name || s.name}</span>
+        <span class="service-meta">${priceLabel}</span>
+      </div>
+    `;
+    row.addEventListener("click", () => {
+      closePackageSelectModal();
+      openBuyModal(s);
+    });
+    list.appendChild(row);
+  });
+
+  document.getElementById("package-select-modal").classList.remove("hidden");
+}
+
+function closePackageSelectModal() {
+  document.getElementById("package-select-modal").classList.add("hidden");
 }
 
 function openBuyModal(service) {
@@ -992,4 +1118,4 @@ async function copyReferralLink() {
 }
 
 init();
-      
+            
