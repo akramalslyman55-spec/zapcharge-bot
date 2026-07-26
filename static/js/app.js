@@ -1,3 +1,7 @@
+window.onerror = function (msg, url, line) {
+  alert("خطأ جافاسكريبت: " + msg + " — بالسطر: " + line);
+};
+
 const tg = window.Telegram?.WebApp;
 
 // عدّل هاد الاسم لاسم البوت الفعلي عندك (بدون @) عشان رابط الإحالة يشتغل صح
