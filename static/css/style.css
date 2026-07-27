@@ -392,6 +392,49 @@ html, body {
 
 .modal-price { font-size: 22px; font-weight: 800; color: var(--accent); margin: 0 0 6px; }
 
+#buy-quantity::-webkit-outer-spin-button,
+#buy-quantity::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+#buy-quantity {
+  -moz-appearance: textfield;
+}
+
+.package-row {
+  cursor: pointer;
+  transition: border-color 0.15s ease;
+}
+.package-row:active {
+  border-color: var(--accent);
+}
+
+.wallet-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 14px;
+  margin-bottom: 10px;
+}
+.wallet-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+.wallet-name {
+  font-size: 14.5px;
+  font-weight: 700;
+}
+.wallet-number {
+  display: block;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--accent);
+  line-height: 1.6;
+  word-break: break-word;
+}
+
 .bottom-nav {
   position: fixed;
   bottom: 0; left: 0; right: 0;
@@ -418,4 +461,3 @@ html, body {
 .bnav-btn .nav-icon { display: flex; opacity: 0.75; }
 .bnav-btn.active { color: var(--accent); }
 .bnav-btn.active .nav-icon { opacity: 1; }
-  
