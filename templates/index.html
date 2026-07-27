@@ -34,7 +34,7 @@
       <!-- Section: Catalog / Store Services -->
       <div id="user-store-section" class="user-section">
         <div class="category-pills" id="category-filters">
-          <button class="cat-btn active" data-cat="all"><span>الكل</span></button>
+          <button class="cat-btn active" data-cat="home"><span>الرئيسية</span></button>
           <button class="cat-btn" data-cat="games">
             <span class="cat-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="6" y1="12" x2="10" y2="12"/><line x1="8" y1="10" x2="8" y2="14"/><circle cx="15" cy="13" r="1"/><circle cx="18" cy="11" r="1"/><rect x="2" y="6" width="20" height="12" rx="4"/></svg></span>
             <span>ألعاب</span>
@@ -61,7 +61,42 @@
           </button>
         </div>
 
-        <div id="user-services-grid" class="services-grid"></div>
+        <!-- الرئيسية: تعليمات الشحن -->
+        <div id="user-home-section">
+          <h3 class="section-title">كيفية شحن الرصيد</h3>
+          <p class="section-desc">حوّل المبلغ لإحدى المحافظ بالأسفل، وبعدها روح لتبويب "شحن" وسجّل تفاصيل التحويل عشان يتم اعتماده وإضافة الرصيد.</p>
+
+          <div class="wallet-card">
+            <div class="wallet-card-header">
+              <span class="wallet-name">شام كاش</span>
+              <button class="icon-btn copy-wallet" data-method="sham_cash">نسخ الرقم</button>
+            </div>
+            <span class="wallet-number" id="wallet-number-sham_cash">—</span>
+          </div>
+
+          <div class="wallet-card">
+            <div class="wallet-card-header">
+              <span class="wallet-name">سيرياتيل كاش</span>
+              <button class="icon-btn copy-wallet" data-method="syriatel_cash">نسخ الرقم</button>
+            </div>
+            <span class="wallet-number" id="wallet-number-syriatel_cash">—</span>
+          </div>
+
+          <div class="wallet-card">
+            <div class="wallet-card-header">
+              <span class="wallet-name">سي والت</span>
+              <button class="icon-btn copy-wallet" data-method="c_wallet">نسخ الرقم</button>
+            </div>
+            <span class="wallet-number" id="wallet-number-c_wallet">—</span>
+          </div>
+        </div>
+
+        <!-- حقل البحث: يظهر بكل التبويبات ما عدا الرئيسية -->
+        <div id="store-search-wrap" class="hidden">
+          <input id="service-search" class="field-input" type="text" placeholder="ابحث عن اسم الخدمة..." style="margin: 14px 0 4px;" />
+        </div>
+
+        <div id="user-services-grid" class="services-grid hidden"></div>
       </div>
 
       <!-- Section: Deposit Funds -->
@@ -201,6 +236,7 @@
       </div>
 
       <div id="admin-services-section" class="admin-section hidden">
+        <input id="admin-service-search" class="field-input" type="text" placeholder="ابحث عن اسم الخدمة..." style="margin-bottom: 12px;" />
         <button class="btn-primary" id="open-add-service">+ إضافة خدمة</button>
         <div id="services-list" class="services-list"></div>
       </div>
@@ -338,5 +374,4 @@
 
   <script src="/static/js/app.js"></script>
 </body>
-</html>                                                                                                                                                                                                                                                                                                    </html>
-          
+</html>
