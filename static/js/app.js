@@ -6,9 +6,18 @@ const BOT_USERNAME = "ZapchargeBot";
 // مفتاح imgbb لرفع صور الخدمات مباشرة من الجهاز
 const IMGBB_API_KEY = "42b366412bbf0a1fa2e013b7e01ec53a";
 
+// أرقام/حسابات الاستلام الحقيقية — عدّلها لأرقامك
+const WALLET_NUMBERS = {
+  sham_cash: "bbe0fc59f6cebd27c00ec004c3d9750f",
+  syriatel_cash: "تأكيد رواتب بعض تطبيقات الشات للتواصل واتساب عبر 0935789062 والسحب عبر شام كاش",
+  c_wallet: "TKk2vYomdGSXGBus5MroZQq7MhbA8ZMDPW",
+};
+
 let currentUser = null; // { telegram_id, first_name, username, balance }
 let allServices = [];
 let currentBuyService = null;
+let currentCategory = "home";
+let currentSearchText = "";
 
 function show(id) {
   document.querySelectorAll(".screen").forEach((el) => el.classList.add("hidden"));
@@ -98,6 +107,7 @@ function setupAdminNav(permissions) {
   });
 
   document.getElementById("open-add-service").addEventListener("click", () => openServiceModal());
+  document.getElementById("admin-service-search").addEventListener("input", renderAdminServicesList);
   document.getElementById("cancel-service-modal").addEventListener("click", closeServiceModal);
   document.getElementById("save-service").addEventListener("click", saveService);
   document.getElementById("service-pricing-type").addEventListener("change", updateServicePricingGroups);
@@ -179,6 +189,8 @@ async function handleImageUpload(event) {
   }
 }
 
+let allAdminServices = [];
+
 async function loadServices() {
   const list = document.getElementById("services-list");
   list.innerHTML = '<p class="placeholder">جاري التحميل...</p>';
@@ -187,37 +199,49 @@ async function loadServices() {
     const res = await fetch("/api/admin/services", { headers: adminHeaders() });
     const services = await res.json();
 
-    if (!Array.isArray(services) || services.length === 0) {
-      list.innerHTML = '<p class="placeholder">لا يوجد خدمات مضافة بعد.</p>';
-      return;
-    }
-
-    list.innerHTML = "";
-    services.forEach((s) => {
-      const priceMeta =
-        s.pricing_type === "variable"
-          ? `${(s.unit_rate || 0).toFixed(4)}$ / ${s.unit_name || "وحدة"}`
-          : `${(s.price || 0).toFixed(2)}$`;
-
-      const row = document.createElement("div");
-      row.className = "service-row";
-      row.innerHTML = `
-        <div class="service-info">
-          <span class="service-name">${s.name}${s.package_name ? " — " + s.package_name : ""}</span>
-          <span class="service-meta">${categoryLabels[s.category] || s.category} · ${priceMeta}${s.active ? "" : " · موقوفة"}</span>
-        </div>
-        <div class="service-actions">
-          <button class="icon-btn edit-service" data-id="${s.id}">تعديل</button>
-          <button class="icon-btn danger delete-service" data-id="${s.id}">حذف</button>
-        </div>
-      `;
-      list.appendChild(row);
-      row.querySelector(".edit-service").addEventListener("click", () => openServiceModal(s));
-      row.querySelector(".delete-service").addEventListener("click", () => deleteService(s.id));
-    });
+    allAdminServices = Array.isArray(services) ? services : [];
+    renderAdminServicesList();
   } catch (err) {
     list.innerHTML = '<p class="placeholder">حدث خطأ أثناء التحميل.</p>';
   }
+}
+
+function renderAdminServicesList() {
+  const list = document.getElementById("services-list");
+  const searchText = document.getElementById("admin-service-search").value.trim().toLowerCase();
+
+  const filtered = searchText
+    ? allAdminServices.filter((s) => s.name.toLowerCase().includes(searchText))
+    : allAdminServices;
+
+  if (filtered.length === 0) {
+    list.innerHTML = `<p class="placeholder">${searchText ? "ما في نتائج مطابقة." : "لا يوجد خدمات مضافة بعد."}</p>`;
+    return;
+  }
+
+  list.innerHTML = "";
+  filtered.forEach((s) => {
+    const priceMeta =
+      s.pricing_type === "variable"
+        ? `يبدأ من ${((s.unit_rate || 0) * (s.min_qty || 1)).toFixed(2)}$ (${s.min_qty || 1} ${s.unit_name || "وحدة"})`
+        : `${(s.price || 0).toFixed(2)}$`;
+
+    const row = document.createElement("div");
+    row.className = "service-row";
+    row.innerHTML = `
+      <div class="service-info">
+        <span class="service-name">${s.name}${s.package_name ? " — " + s.package_name : ""}</span>
+        <span class="service-meta">${categoryLabels[s.category] || s.category} · ${priceMeta}${s.active ? "" : " · موقوفة"}</span>
+      </div>
+      <div class="service-actions">
+        <button class="icon-btn edit-service" data-id="${s.id}">تعديل</button>
+        <button class="icon-btn danger delete-service" data-id="${s.id}">حذف</button>
+      </div>
+    `;
+    list.appendChild(row);
+    row.querySelector(".edit-service").addEventListener("click", () => openServiceModal(s));
+    row.querySelector(".delete-service").addEventListener("click", () => deleteService(s.id));
+  });
 }
 
 function openServiceModal(service = null) {
@@ -746,11 +770,22 @@ function setupStoreNav() {
 
   // فلاتر التصنيفات
   document.querySelectorAll(".cat-btn").forEach((btn) => {
-    btn.addEventListener("click", () => {
-      document.querySelectorAll(".cat-btn").forEach((b) => b.classList.remove("active"));
-      btn.classList.add("active");
-      renderServicesGrid(btn.dataset.cat);
-    });
+    btn.addEventListener("click", () => selectCategory(btn.dataset.cat));
+  });
+
+  // حقل البحث
+  document.getElementById("service-search").addEventListener("input", (e) => {
+    currentSearchText = e.target.value;
+    renderServicesGrid(currentCategory);
+  });
+
+  // أرقام المحافظ بشاشة الرئيسية
+  document.getElementById("wallet-number-sham_cash").textContent = WALLET_NUMBERS.sham_cash;
+  document.getElementById("wallet-number-syriatel_cash").textContent = WALLET_NUMBERS.syriatel_cash;
+  document.getElementById("wallet-number-c_wallet").textContent = WALLET_NUMBERS.c_wallet;
+
+  document.querySelectorAll(".copy-wallet").forEach((btn) => {
+    btn.addEventListener("click", () => copyWalletNumber(btn.dataset.method));
   });
 
   // مودال اختيار الباقة
@@ -792,9 +827,42 @@ async function loadStoreServices() {
     const services = await res.json();
 
     allServices = Array.isArray(services) ? services : [];
-    renderServicesGrid("all");
+    renderStoreView();
   } catch (err) {
     grid.innerHTML = '<p class="placeholder">حدث خطأ أثناء تحميل الخدمات.</p>';
+  }
+}
+
+function selectCategory(cat) {
+  currentCategory = cat;
+  document.querySelectorAll(".cat-btn").forEach((b) => b.classList.toggle("active", b.dataset.cat === cat));
+  renderStoreView();
+}
+
+function renderStoreView() {
+  const homeSection = document.getElementById("user-home-section");
+  const searchWrap = document.getElementById("store-search-wrap");
+  const grid = document.getElementById("user-services-grid");
+
+  if (currentCategory === "home") {
+    homeSection.classList.remove("hidden");
+    searchWrap.classList.add("hidden");
+    grid.classList.add("hidden");
+  } else {
+    homeSection.classList.add("hidden");
+    searchWrap.classList.remove("hidden");
+    grid.classList.remove("hidden");
+    renderServicesGrid(currentCategory);
+  }
+}
+
+async function copyWalletNumber(method) {
+  const number = WALLET_NUMBERS[method] || "";
+  try {
+    await navigator.clipboard.writeText(number);
+    alert("تم نسخ الرقم!");
+  } catch (err) {
+    alert("تعذّر نسخ الرقم.");
   }
 }
 
@@ -808,12 +876,21 @@ function groupServicesByName(list) {
   return groups;
 }
 
+function servicePriceForSort(s) {
+  return s.pricing_type === "variable" ? (s.unit_rate || 0) * (s.min_qty || 1) : s.price || 0;
+}
+
 function renderServicesGrid(category) {
   const grid = document.getElementById("user-services-grid");
-  const filtered = category === "all" ? allServices : allServices.filter((s) => s.category === category);
+  let filtered = category === "all" ? allServices : allServices.filter((s) => s.category === category);
+
+  if (currentSearchText.trim()) {
+    const q = currentSearchText.trim().toLowerCase();
+    filtered = filtered.filter((s) => s.name.toLowerCase().includes(q));
+  }
 
   if (filtered.length === 0) {
-    grid.innerHTML = '<p class="placeholder">لا يوجد خدمات بهاد التصنيف حالياً.</p>';
+    grid.innerHTML = `<p class="placeholder">${currentSearchText.trim() ? "ما في نتائج مطابقة." : "لا يوجد خدمات بهاد التصنيف حالياً."}</p>`;
     return;
   }
 
@@ -828,18 +905,15 @@ function renderServicesGrid(category) {
     let subLabel;
 
     if (group.length > 1) {
-      const prices = group.map((s) => (s.pricing_type === "variable" ? (s.unit_rate || 0) : (s.price || 0)));
+      const prices = group.map(servicePriceForSort);
       const min = Math.min(...prices);
       const max = Math.max(...prices);
       priceLabel = min === max ? `${min.toFixed(2)}$` : `من ${min.toFixed(2)}$`;
       subLabel = `${group.length} باقات متاحة`;
     } else {
       const s = group[0];
-      priceLabel =
-        s.pricing_type === "variable"
-          ? `${(s.unit_rate || 0).toFixed(4)}$ / ${s.unit_name || "وحدة"}`
-          : `${(s.price || 0).toFixed(2)}$`;
-      subLabel = s.package_name || "";
+      priceLabel = `${servicePriceForSort(s).toFixed(2)}$`;
+      subLabel = s.pricing_type === "variable" ? `يبدأ من ${s.min_qty || 1} ${s.unit_name || "وحدة"}` : s.package_name || "";
     }
 
     const card = document.createElement("div");
@@ -877,10 +951,7 @@ function openPackageSelectModal(name, services) {
   list.innerHTML = "";
 
   services.forEach((s) => {
-    const priceLabel =
-      s.pricing_type === "variable"
-        ? `${(s.unit_rate || 0).toFixed(4)}$ / ${s.unit_name || "وحدة"}`
-        : `${(s.price || 0).toFixed(2)}$`;
+    const priceLabel = `${servicePriceForSort(s).toFixed(2)}$`;
 
     const row = document.createElement("div");
     row.className = "service-row package-row";
@@ -921,9 +992,9 @@ function openBuyModal(service) {
     document.getElementById("buy-quantity-label").textContent = `الكمية (${service.unit_name || "وحدة"})`;
     quantityInput.value = "";
 
-    let hint = `سعر الوحدة: ${(service.unit_rate || 0).toFixed(4)}$`;
-    if (service.min_qty) hint += ` · الحد الأدنى: ${service.min_qty}`;
-    if (service.max_qty) hint += ` · الحد الأقصى: ${service.max_qty}`;
+    let hint = "";
+    if (service.min_qty) hint += `الحد الأدنى: ${service.min_qty} (${servicePriceForSort(service).toFixed(2)}$)`;
+    if (service.max_qty) hint += `${hint ? " · " : ""}الحد الأقصى: ${service.max_qty}`;
     quantityHint.textContent = hint;
 
     priceEl.textContent = "0.00$";
