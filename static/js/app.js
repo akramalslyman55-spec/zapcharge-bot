@@ -179,7 +179,8 @@ async function handleImageUpload(event) {
     const data = await res.json();
 
     if (!data.success) {
-      statusEl.textContent = "فشل رفع الصورة، جرّب مرة ثانية.";
+      const apiMsg = (data.error && data.error.message) || `HTTP ${res.status}`;
+      statusEl.textContent = `فشل رفع الصورة: ${apiMsg}`;
       return;
     }
 
@@ -189,7 +190,7 @@ async function handleImageUpload(event) {
     previewEl.classList.remove("hidden");
     statusEl.textContent = "تم رفع الصورة بنجاح ✓";
   } catch (err) {
-    statusEl.textContent = "فشل رفع الصورة، تأكد من الاتصال بالإنترنت.";
+    statusEl.textContent = "فشل رفع الصورة: " + (err && err.message ? err.message : "خطأ اتصال غير معروف");
   } finally {
     event.target.value = "";
   }
