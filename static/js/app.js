@@ -7,10 +7,16 @@ const BOT_USERNAME = "ZapchargeBot";
 const IMGBB_API_KEY = "42b366412bbf0a1fa2e013b7e01ec53a";
 
 // أرقام/حسابات الاستلام الحقيقية — عدّلها لأرقامك
+// أرقام/حسابات الاستلام الحقيقية — عدّلها لأرقامك
 const WALLET_NUMBERS = {
   sham_cash: "bbe0fc59f6cebd27c00ec004c3d9750f",
   syriatel_cash: "تأكيد رواتب بعض تطبيقات الشات للتواصل واتساب عبر 0935789062 والسحب عبر شام كاش",
   c_wallet: "TKk2vYomdGSXGBus5MroZQq7MhbA8ZMDPW",
+};
+
+// القيمة يلي فعلياً بتنسخ عند الضغط على "نسخ الرقم" (لو مختلفة عن النص المعروض)
+const WALLET_COPY_VALUES = {
+  syriatel_cash: "0935789062",
 };
 
 let currentUser = null; // { telegram_id, first_name, username, balance }
@@ -857,7 +863,7 @@ function renderStoreView() {
 }
 
 async function copyWalletNumber(method) {
-  const number = WALLET_NUMBERS[method] || "";
+  const number = WALLET_COPY_VALUES[method] || WALLET_NUMBERS[method] || "";
   try {
     await navigator.clipboard.writeText(number);
     alert("تم نسخ الرقم!");
