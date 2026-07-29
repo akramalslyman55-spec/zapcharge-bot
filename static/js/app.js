@@ -3,8 +3,11 @@ const tg = window.Telegram?.WebApp;
 // عدّل هاد الاسم لاسم البوت الفعلي عندك (بدون @) عشان رابط الإحالة يشتغل صح
 const BOT_USERNAME = "ZapchargeBot";
 
-// مفتاح imgbb لرفع صور الخدمات مباشرة من الجهاز
+// مفتاح imgbb لرفع صور الخدمات مباشرة من الجهاز (احتياطي)
 const IMGBB_API_KEY = "42b366412bbf0a1fa2e013b7e01ec53a";
+
+// مفتاح Uploadcare العام لرفع الصور (الطريقة الأساسية الحالية)
+const UPLOADCARE_PUBLIC_KEY = "b960fbe41fc236127d98";
 
 // أرقام/حسابات الاستلام الحقيقية — عدّلها لأرقامك
 // أرقام/حسابات الاستلام الحقيقية — عدّلها لأرقامك
@@ -169,22 +172,22 @@ async function handleImageUpload(event) {
 
   try {
     const formData = new FormData();
-    formData.append("key", IMGBB_API_KEY);
-    formData.append("image", file);
+    formData.append("UPLOADCARE_PUB_KEY", UPLOADCARE_PUBLIC_KEY);
+    formData.append("UPLOADCARE_STORE", "1");
+    formData.append("file", file);
 
-    const res = await fetch("https://api.imgbb.com/1/upload", {
+    const res = await fetch("https://upload.uploadcare.com/base/", {
       method: "POST",
       body: formData,
     });
     const data = await res.json();
 
-    if (!data.success) {
-      const apiMsg = (data.error && data.error.message) || `HTTP ${res.status}`;
-      statusEl.textContent = `فشل رفع الصورة: ${apiMsg}`;
+    if (!data.file) {
+      statusEl.textContent = `فشل رفع الصورة: HTTP ${res.status}`;
       return;
     }
 
-    const url = data.data.url;
+    const url = `https://ucarecdn.com/${data.file}/`;
     document.getElementById("service-image").value = url;
     previewEl.src = url;
     previewEl.classList.remove("hidden");
