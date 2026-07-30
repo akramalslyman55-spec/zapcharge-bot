@@ -187,7 +187,7 @@ async function handleImageUpload(event) {
       return;
     }
 
-    const url = `https://ucarecdn.com/${data.file}/`;
+    const url = `https://3w8utfx273.ucarecd.net/${data.file}/`;
     document.getElementById("service-image").value = url;
     previewEl.src = url;
     previewEl.classList.remove("hidden");
