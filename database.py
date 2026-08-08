@@ -20,6 +20,10 @@ class Service(db.Model):
     name = db.Column(db.String(128))
     package_name = db.Column(db.String(128), nullable=True)
 
+    # النص يلي بيبين للزبون كعنوان لحقل الإدخال بنافذة الشراء (مثال: "معرف اللاعب" أو "الإيميل")
+    # إذا فاضي، بيستخدم الفرونت إند نص افتراضي عام
+    input_label = db.Column(db.String(64), nullable=True)
+
     # نوع التسعير: "fixed" = باقة بسعر ثابت (زي الألعاب)
     #              "variable" = كمية حرة يكتبها الزبون وبينحسب سعرها بمعدّل (زي كونزات تطبيقات التواصل)
     pricing_type = db.Column(db.String(16), default="fixed", nullable=False)
@@ -79,4 +83,5 @@ class OperationLog(db.Model):
     action = db.Column(db.String(64))
     details = db.Column(db.String(256), nullable=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
     
