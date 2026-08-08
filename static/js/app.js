@@ -260,6 +260,7 @@ function openServiceModal(service = null) {
   document.getElementById("service-category").value = service ? service.category : "games";
   document.getElementById("service-name").value = service ? service.name : "";
   document.getElementById("service-package").value = service ? (service.package_name || "") : "";
+  document.getElementById("service-input-label").value = service ? (service.input_label || "") : "";
 
   const pricingType = service ? (service.pricing_type || "fixed") : "fixed";
   document.getElementById("service-pricing-type").value = pricingType;
@@ -306,6 +307,7 @@ async function saveService() {
     category: document.getElementById("service-category").value,
     name: document.getElementById("service-name").value.trim(),
     package_name: document.getElementById("service-package").value.trim() || null,
+    input_label: document.getElementById("service-input-label").value.trim() || null,
     pricing_type: pricingType,
     image_url: document.getElementById("service-image").value.trim() || null,
     active: document.getElementById("service-active").checked,
@@ -991,6 +993,8 @@ function openBuyModal(service) {
   document.getElementById("buy-modal-service-name").textContent =
     service.name + (service.package_name ? " — " + service.package_name : "");
   document.getElementById("buy-player-id").value = "";
+  document.getElementById("buy-modal-input-label").textContent =
+    service.input_label || "معرّف اللاعب / رقم الحساب / الإيميل";
 
   const quantityGroup = document.getElementById("buy-modal-quantity-group");
   const quantityInput = document.getElementById("buy-quantity");
