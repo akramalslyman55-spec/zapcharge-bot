@@ -1,39 +1,28 @@
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import Application, CommandHandler, CallbackQueryHandler, ContextTypes
+import os
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, WebAppInfo
+from telegram.ext import Application, CommandHandler, ContextTypes
 
-BOT_TOKEN = "8874153125:AAETxa6Ed0I36jLC1rX7GocyxapJ0np9VFQ"
+BOT_TOKEN = os.environ.get("BOT_TOKEN")
+STORE_URL = "https://zapcharge-bot-production.up.railway.app"
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     keyboard = [
-        [InlineKeyboardButton("🛒 المنتجات", callback_data="products")],
-        [InlineKeyboardButton("💰 رصيدي", callback_data="balance")],
-        [InlineKeyboardButton("🆘 الدعم", callback_data="support")],
+        [InlineKeyboardButton("فتح المتجر ⚡", web_app=WebAppInfo(url=STORE_URL))],
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
     await update.message.reply_text(
-        "أهلاً فيك بمتجر Zapcharge ⚡\n"
-        "شحن فوري وآمن لجميع الألعاب والتطبيقات.\n\n"
-        "اختر من القائمة تحت:",
+        "أهلاً فيك بـZapcharge ⚡\n"
+        "شحن فوري وآمن لجميع الألعاب والتطبيقات والاشتراكات.\n\n"
+        "اضغط الزر تحت لفتح المتجر:",
         reply_markup=reply_markup
     )
-
-async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
-    await query.answer()
-
-    if query.data == "products":
-        await query.edit_message_text("📦 قائمة المنتجات قريباً رح تنضاف هون.")
-    elif query.data == "balance":
-        await query.edit_message_text("💰 رصيدك الحالي: 0$")
-    elif query.data == "support":
-        await query.edit_message_text("🆘 الدعم رح يتفعل قريباً، تابعنا لحتى نضيف الرابط.")
 
 def main():
     app = Application.builder().token(BOT_TOKEN).build()
     app.add_handler(CommandHandler("start", start))
-    app.add_handler(CallbackQueryHandler(button_handler))
     print("البوت شغال...")
     app.run_polling()
 
 if __name__ == "__main__":
     main()
+    
