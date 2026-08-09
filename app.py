@@ -8,7 +8,7 @@ from typing import Optional, Dict
 from functools import wraps
 from urllib.parse import parse_qsl
 from flask import Flask, request, jsonify, render_template
-from database import db, Admin, User, Service, Order, Deposit, OperationLog
+from database import db, Admin, User, Service, Order, Deposit, OperationLog, Setting, DepositMethod
 
 BOT_TOKEN = os.environ.get("BOT_TOKEN", "")
 ADMIN_IDS = set(
@@ -39,6 +39,27 @@ with app.app_context():
         db.session.commit()
     except Exception:
         db.session.rollback()
+
+    # تعبئة طرق الإيداع الافتراضية أول مرة بس (إذا الجدول فاضي) — نفس أرقامك الحالية بالظبط
+    if DepositMethod.query.count() == 0:
+        db.session.add_all([
+            DepositMethod(
+                code="sham_cash", name="شام كاش",
+                display_value="bbe0fc59f6cebd27c00ec004c3d9750f",
+                copy_value=None, instructions=None, active=True, sort_order=1,
+            ),
+            DepositMethod(
+                code="syriatel_cash", name="سيرياتيل كاش",
+                display_value="تأكيد رواتب بعض تطبيقات الشات للتواصل واتساب عبر 0935789062 والسحب عبر شام كاش",
+                copy_value="0935789062", instructions=None, active=True, sort_order=2,
+            ),
+            DepositMethod(
+                code="c_wallet", name="سي والت",
+                display_value="TKk2vYomdGSXGBus5MroZQq7MhbA8ZMDPW",
+                copy_value=None, instructions=None, active=True, sort_order=3,
+            ),
+        ])
+        db.session.commit()
 
 
 def verify_telegram_init_data(init_data: str) -> Optional[dict]:
@@ -135,6 +156,21 @@ def send_telegram_message(chat_id: str, text: str) -> bool:
         return False
 
 
+def get_setting(key, default=None):
+    s = Setting.query.filter_by(key=key).first()
+    return s.value if s else default
+
+
+def set_setting(key, value):
+    s = Setting.query.filter_by(key=key).first()
+    if s:
+        s.value = value
+    else:
+        s = Setting(key=key, value=value)
+        db.session.add(s)
+    db.session.commit()
+
+
 def require_admin(f):
     @wraps(f)
     def wrapper(*args, **kwargs):
@@ -197,14 +233,14 @@ def auth():
             first_name=user.get("first_name", ""),
             username=user.get("username", ""),
         )
-        db.session.add(db_user)
-        db.session.commit()
+        db.session.add(db_user)db.session.commit()
 
     return jsonify(
         {
             "ok": True,
             "is_admin": is_admin,
             "permissions": get_permissions(telegram_id) if is_admin else None,
+            "store_active": get_setting("store_active", "true") == "true",
             "user": {
                 "telegram_id": telegram_id,
                 "first_name": user.get("first_name", ""),
@@ -243,6 +279,9 @@ def store_services():
 @app.route("/api/store/order", methods=["POST"])
 @require_user
 def store_order():
+    if get_setting("store_active", "true") != "true":
+        return jsonify({"ok": False, "error": "store_paused"}), 403
+
     body = request.get_json(silent=True) or {}
     service_id = body.get("service_id")
     player_id = str(body.get("player_id", "")).strip()
@@ -429,7 +468,7 @@ def admin_logs():
             }
             for l in logs
         ]
-    )
+                           ))
 
 
 @app.route("/api/admin/services", methods=["GET"])
@@ -664,7 +703,134 @@ def cancel_order(order_id):
 
     reason_msg = f"\nالسبب: {order.cancel_reason}" if order.cancel_reason else ""
     send_telegram_message(order.user_telegram_id, f"❌ تم إلغاء طلبك #{order.id} وإعادة المبلغ ({order.price:.2f}$) لحسابك.{reason_msg}")
+    return jsonify({"ok": True})# ==================== DEPOSIT METHODS ====================
+
+@app.route("/api/store/deposit-methods", methods=["GET"])
+@require_user
+def store_deposit_methods():
+    methods = DepositMethod.query.filter_by(active=True).order_by(DepositMethod.sort_order, DepositMethod.id).all()
+    return jsonify([
+        {
+            "id": m.id,
+            "code": m.code,
+            "name": m.name,
+            "display_value": m.display_value,
+            "copy_value": m.copy_value,
+            "instructions": m.instructions,
+        }
+        for m in methods
+    ])
+
+
+@app.route("/api/admin/deposit-methods", methods=["GET"])
+@require_admin
+def admin_deposit_methods():
+    methods = DepositMethod.query.order_by(DepositMethod.sort_order, DepositMethod.id).all()
+    return jsonify([
+        {
+            "id": m.id,
+            "code": m.code,
+            "name": m.name,
+            "display_value": m.display_value,
+            "copy_value": m.copy_value,
+            "instructions": m.instructions,
+            "active": m.active,
+            "sort_order": m.sort_order,
+        }
+        for m in methods
+    ])
+
+
+def _slugify_method_code(name, existing_id=None):
+    import re
+    base = re.sub(r"[^a-zA-Z0-9]+", "_", name.strip()).strip("_").lower() or "method"
+    code = base
+    i = 1
+    while True:
+        q = DepositMethod.query.filter_by(code=code)
+        if existing_id:
+            q = q.filter(DepositMethod.id != existing_id)
+        if q.first() is None:
+            return code
+        i += 1
+        code = f"{base}_{i}"
+
+
+@app.route("/api/admin/deposit-methods", methods=["POST"])
+@require_admin
+def add_deposit_method():
+    body = request.get_json(silent=True) or {}
+    name = (body.get("name") or "").strip()
+    display_value = (body.get("display_value") or "").strip()
+
+    if not name or not display_value:
+        return jsonify({"ok": False, "error": "missing_fields"}), 400
+
+    method = DepositMethod(
+        code=_slugify_method_code(name),
+        name=name,
+        display_value=display_value,
+        copy_value=(body.get("copy_value") or "").strip() or None,
+        instructions=(body.get("instructions") or "").strip() or None,
+        active=body.get("active", True),
+        sort_order=body.get("sort_order", 0),
+    )
+    db.session.add(method)
+    db.session.commit()
+    return jsonify({"ok": True, "id": method.id})
+
+
+@app.route("/api/admin/deposit-methods/<int:method_id>", methods=["PUT"])
+@require_admin
+def edit_deposit_method(method_id):
+    method = DepositMethod.query.get(method_id)
+    if not method:
+        return jsonify({"ok": False, "error": "not_found"}), 404
+
+    body = request.get_json(silent=True) or {}
+    if "name" in body:
+        method.name = (body["name"] or "").strip()
+    if "display_value" in body:
+        method.display_value = (body["display_value"] or "").strip()
+    if "copy_value" in body:
+        method.copy_value = (body["copy_value"] or "").strip() or None
+    if "instructions" in body:
+        method.instructions = (body["instructions"] or "").strip() or None
+    if "active" in body:
+        method.active = bool(body["active"])
+    if "sort_order" in body:
+        method.sort_order = body["sort_order"]
+
+    db.session.commit()
     return jsonify({"ok": True})
+
+
+@app.route("/api/admin/deposit-methods/<int:method_id>", methods=["DELETE"])
+@require_admin
+def delete_deposit_method(method_id):
+    method = DepositMethod.query.get(method_id)
+    if not method:
+        return jsonify({"ok": False, "error": "not_found"}), 404
+    db.session.delete(method)
+    db.session.commit()
+    return jsonify({"ok": True})
+
+
+# ==================== STORE ACTIVE / PAUSED ====================
+
+@app.route("/api/admin/store-status", methods=["GET"])
+@require_admin
+def get_store_status():
+    return jsonify({"ok": True, "active": get_setting("store_active", "true") == "true"})
+
+
+@app.route("/api/admin/store-status", methods=["POST"])
+@require_admin
+def set_store_status():
+    body = request.get_json(silent=True) or {}
+    active = bool(body.get("active", True))
+    set_setting("store_active", "true" if active else "false")
+    return jsonify({"ok": True, "active": active})
 
 
 @app.route("/api/admin/admins", methods=["GET"])
