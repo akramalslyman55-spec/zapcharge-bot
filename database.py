@@ -84,4 +84,20 @@ class OperationLog(db.Model):
     details = db.Column(db.String(256), nullable=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
-    
+
+class Setting(db.Model):
+    # جدول عام لأي إعداد بسيط (key/value)، أول استخدام له: إيقاف/تشغيل المتجر مؤقتًا
+    id = db.Column(db.Integer, primary_key=True)
+    key = db.Column(db.String(64), unique=True, nullable=False)
+    value = db.Column(db.String(256), nullable=True)
+
+
+class DepositMethod(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    code = db.Column(db.String(64), unique=True, nullable=False)  # داخلي وثابت، ما يتغير بعد الإنشاء
+    name = db.Column(db.String(64), nullable=False)                # الاسم المعروض للزبون
+    display_value = db.Column(db.String(256), nullable=False)      # الرقم/النص يلي يبين للزبون
+    copy_value = db.Column(db.String(256), nullable=True)          # القيمة الفعلية يلي بتنسخ لو مختلفة
+    instructions = db.Column(db.String(512), nullable=True)        # تعليمات إضافية اختيارية
+    active = db.Column(db.Boolean, default=True)
+    sort_order = db.Column(db.Integer, default=0)
