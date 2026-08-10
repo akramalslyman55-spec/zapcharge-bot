@@ -6,22 +6,6 @@ const BOT_USERNAME = "ZapchargeBot";
 // مفتاح imgbb لرفع صور الخدمات مباشرة من الجهاز (احتياطي)
 const IMGBB_API_KEY = "42b366412bbf0a1fa2e013b7e01ec53a";
 
-// مفتاح Uploadcare العام لرفع الصور (الطريقة الأساسية الحالية)
-const UPLOADCARE_PUBLIC_KEY = "b960fbe41fc236127d98";
-
-// أرقام/حسابات الاستلام الحقيقية — عدّلها لأرقامك
-// أرقام/حسابات الاستلام الحقيقية — عدّلها لأرقامك
-const WALLET_NUMBERS = {
-  sham_cash: "bbe0fc59f6cebd27c00ec004c3d9750f",
-  syriatel_cash: "تأكيد رواتب بعض تطبيقات الشات للتواصل واتساب عبر 0935789062 والسحب عبر شام كاش",
-  c_wallet: "TKk2vYomdGSXGBus5MroZQq7MhbA8ZMDPW",
-};
-
-// القيمة يلي فعلياً بتنسخ عند الضغط على "نسخ الرقم" (لو مختلفة عن النص المعروض)
-const WALLET_COPY_VALUES = {
-  syriatel_cash: "0935789062",
-};
-
 let currentUser = null; // { telegram_id, first_name, username, balance }
 let allServices = [];
 let currentBuyService = null;
@@ -43,6 +27,7 @@ function showAdminSection(id) {
 
   if (id === "admin-services-section") loadServices();
   if (id === "admin-deposits-section") loadDeposits();
+  if (id === "admin-deposit-methods-section") loadDepositMethods();
   if (id === "admin-orders-section") loadOrders();
   if (id === "admin-admins-section") loadAdmins();
   if (id === "admin-stats-section") loadStats();
@@ -79,6 +64,8 @@ async function init() {
       show("admin-view");
       setupAdminNav(data.permissions);
       loadAdminSummary();
+    } else if (data.store_active === false) {
+      show("store-paused-view");
     } else {
       currentUser = data.user;
       updateBalanceDisplay();
@@ -103,6 +90,25 @@ async function loadAdminSummary() {
     document.getElementById("stat-orders").textContent = data.pending_orders;
     document.getElementById("stat-deposits").textContent = data.pending_deposits;
   } catch (err) {}
+
+  try {
+    const res2 = await fetch("/api/admin/store-status", { headers: adminHeaders() });
+    const data2 = await res2.json();
+    document.getElementById("store-active-toggle").checked = !!data2.active;
+  } catch (err) {}
+}
+
+async function toggleStoreStatus() {
+  const active = document.getElementById("store-active-toggle").checked;
+  try {
+    await fetch("/api/admin/store-status", {
+      method: "POST",
+      headers: adminHeaders({ "Content-Type": "application/json" }),
+      body: JSON.stringify({ active }),
+    });
+  } catch (err) {
+    alert("تعذّر تحديث حالة المتجر، جرّب مرة ثانية.");
+  }
 }
 
 function setupAdminNav(permissions) {
@@ -130,6 +136,12 @@ function setupAdminNav(permissions) {
   document.getElementById("open-add-admin").addEventListener("click", () => openAdminModal());
   document.getElementById("cancel-admin-modal").addEventListener("click", closeAdminModal);
   document.getElementById("save-admin").addEventListener("click", saveAdmin);
+
+  document.getElementById("store-active-toggle").addEventListener("change", toggleStoreStatus);
+
+  document.getElementById("open-add-deposit-method").addEventListener("click", () => openDepositMethodModal());
+  document.getElementById("cancel-deposit-method-modal").addEventListener("click", closeDepositMethodModal);
+  document.getElementById("save-deposit-method").addEventListener("click", saveDepositMethod);
 
   document.getElementById("send-broadcast").addEventListener("click", sendBroadcast);
 }
@@ -172,22 +184,21 @@ async function handleImageUpload(event) {
 
   try {
     const formData = new FormData();
-    formData.append("UPLOADCARE_PUB_KEY", UPLOADCARE_PUBLIC_KEY);
-    formData.append("UPLOADCARE_STORE", "1");
-    formData.append("file", file);
+    formData.append("key", IMGBB_API_KEY);
+    formData.append("image", file);
 
-    const res = await fetch("https://upload.uploadcare.com/base/", {
+    const res = await fetch("https://api.imgbb.com/1/upload", {
       method: "POST",
       body: formData,
     });
     const data = await res.json();
 
-    if (!data.file) {
+    if (!data.success) {
       statusEl.textContent = `فشل رفع الصورة: HTTP ${res.status}`;
       return;
     }
 
-    const url = `https://3w8utfx273.ucarecd.net/${data.file}/`;
+    const url = data.data.url;
     document.getElementById("service-image").value = url;
     previewEl.src = url;
     previewEl.classList.remove("hidden");
@@ -260,9 +271,7 @@ function openServiceModal(service = null) {
   document.getElementById("service-category").value = service ? service.category : "games";
   document.getElementById("service-name").value = service ? service.name : "";
   document.getElementById("service-package").value = service ? (service.package_name || "") : "";
-  document.getElementById("service-input-label").value = service ? (service.input_label || "") : "";
-
-  const pricingType = service ? (service.pricing_type || "fixed") : "fixed";
+  document.getElementById("service-input-label").value = service ? (service.input_label || "") : "";const pricingType = service ? (service.pricing_type || "fixed") : "fixed";
   document.getElementById("service-pricing-type").value = pricingType;
 
   document.getElementById("service-price").value = service && service.price != null ? service.price : "";
@@ -372,11 +381,123 @@ async function deleteService(id) {
   } catch (err) {}
 }
 
-const methodLabels = {
+let methodLabels = {
   sham_cash: "شام كاش",
   syriatel_cash: "سيرياتيل كاش",
   c_wallet: "سي والت",
 };
+
+let allDepositMethods = [];
+let editingDepositMethodId = null;
+
+async function loadDepositMethods() {
+  const list = document.getElementById("deposit-methods-list");
+  list.innerHTML = '<p class="placeholder">جاري التحميل...</p>';
+
+  try {
+    const res = await fetch("/api/admin/deposit-methods", { headers: adminHeaders() });
+    const methods = await res.json();
+
+    allDepositMethods = Array.isArray(methods) ? methods : [];
+    methods.forEach((m) => { methodLabels[m.code] = m.name; });
+    renderDepositMethodsList();
+  } catch (err) {
+    list.innerHTML = '<p class="placeholder">حدث خطأ أثناء التحميل.</p>';
+  }
+}
+
+function renderDepositMethodsList() {
+  const list = document.getElementById("deposit-methods-list");
+
+  if (allDepositMethods.length === 0) {
+    list.innerHTML = '<p class="placeholder">لا يوجد طرق إيداع مضافة بعد.</p>';
+    return;
+  }
+
+  list.innerHTML = "";
+  allDepositMethods.forEach((m) => {
+    const row = document.createElement("div");
+    row.className = "service-row";
+    row.innerHTML = `
+      <div class="service-info">
+        <span class="service-name">${m.name}${m.active ? "" : " · موقوفة"}</span>
+        <span class="service-meta">${m.display_value}</span>
+      </div>
+      <div class="service-actions">
+        <button class="icon-btn edit-dm" data-id="${m.id}">تعديل</button>
+        <button class="icon-btn danger delete-dm" data-id="${m.id}">حذف</button>
+      </div>
+    `;
+    list.appendChild(row);
+    row.querySelector(".edit-dm").addEventListener("click", () => openDepositMethodModal(m));
+    row.querySelector(".delete-dm").addEventListener("click", () => deleteDepositMethod(m.id));
+  });
+}
+
+function openDepositMethodModal(method = null) {
+  editingDepositMethodId = method ? method.id : null;
+  document.getElementById("deposit-method-modal-title").textContent = method ? "تعديل طريقة إيداع" : "إضافة طريقة إيداع";
+  document.getElementById("dm-name").value = method ? method.name : "";
+  document.getElementById("dm-display-value").value = method ? method.display_value : "";
+  document.getElementById("dm-copy-value").value = method ? (method.copy_value || "") : "";
+  document.getElementById("dm-instructions").value = method ? (method.instructions || "") : "";
+  document.getElementById("dm-active").checked = method ? method.active : true;
+  document.getElementById("deposit-method-modal").classList.remove("hidden");
+}
+
+function closeDepositMethodModal() {
+  document.getElementById("deposit-method-modal").classList.add("hidden");
+}
+
+async function saveDepositMethod() {
+  const body = {
+    name: document.getElementById("dm-name").value.trim(),
+    display_value: document.getElementById("dm-display-value").value.trim(),
+    copy_value: document.getElementById("dm-copy-value").value.trim(),
+    instructions: document.getElementById("dm-instructions").value.trim(),
+    active: document.getElementById("dm-active").checked,
+  };
+
+  if (!body.name || !body.display_value) {
+    alert("لازم تكتب الاسم والرقم/النص المعروض على الأقل");
+    return;
+  }
+
+  try {
+    const url = editingDepositMethodId ? `/api/admin/deposit-methods/${editingDepositMethodId}` : "/api/admin/deposit-methods";
+    const method = editingDepositMethodId ? "PUT" : "POST";
+
+    const res = await fetch(url, {
+      method,
+      headers: adminHeaders({ "Content-Type": "application/json" }),
+      body: JSON.stringify(body),
+    });
+    const data = await res.json();
+
+    if (!data.ok) {
+      alert("حدث خطأ، جرّب مرة ثانية.");
+      return;
+    }
+
+    closeDepositMethodModal();
+    loadDepositMethods();
+  } catch (err) {
+    alert("حدث خطأ، جرّب مرة ثانية.");
+  }
+}
+
+async function deleteDepositMethod(id) {
+  if (!confirm("متأكد إنك بدك تحذف هاي الطريقة؟ (الإيداعات القديمة المرتبطة فيها رح تضل موجودة بسجلاتك)")) return;
+
+  try {
+    const res = await fetch(`/api/admin/deposit-methods/${id}`, {
+      method: "DELETE",
+      headers: adminHeaders(),
+    });
+    const data = await res.json();
+    if (data.ok) loadDepositMethods();
+  } catch (err) {}
+}
 
 async function loadDeposits() {
   const list = document.getElementById("deposits-list");
@@ -421,8 +542,7 @@ async function loadDeposits() {
   }
 }
 
-async function approveDeposit(id) {
-  if (!confirm("متأكد إنك بدك تقبل هاي الإيداع؟ رح تضاف القيمة لرصيد المستخدم.")) return;
+async function approveDeposit(id) {if (!confirm("متأكد إنك بدك تقبل هاي الإيداع؟ رح تضاف القيمة لرصيد المستخدم.")) return;
 
   try {
     const res = await fetch(`/api/admin/deposits/${id}/approve`, {
@@ -699,8 +819,7 @@ function formatLogDate(iso) {
 }
 
 async function loadLogs() {
-  const list = document.getElementById("logs-list");
-  list.innerHTML = '<p class="placeholder">جاري التحميل...</p>';
+  const list = document.getElementById("logs-list");list.innerHTML = '<p class="placeholder">جاري التحميل...</p>';
 
   try {
     const res = await fetch("/api/admin/logs", { headers: adminHeaders() });
@@ -791,14 +910,8 @@ function setupStoreNav() {
     renderServicesGrid(currentCategory);
   });
 
-  // أرقام المحافظ بشاشة الرئيسية
-  document.getElementById("wallet-number-sham_cash").textContent = WALLET_NUMBERS.sham_cash;
-  document.getElementById("wallet-number-syriatel_cash").textContent = WALLET_NUMBERS.syriatel_cash;
-  document.getElementById("wallet-number-c_wallet").textContent = WALLET_NUMBERS.c_wallet;
-
-  document.querySelectorAll(".copy-wallet").forEach((btn) => {
-    btn.addEventListener("click", () => copyWalletNumber(btn.dataset.method));
-  });
+  // أرقام المحافظ وطرق الدفع بشاشة الرئيسية ونافذة الإيداع
+  loadCustomerDepositMethods();
 
   // مودال اختيار الباقة
   document.getElementById("cancel-package-select").addEventListener("click", closePackageSelectModal);
@@ -811,7 +924,6 @@ function setupStoreNav() {
   // نموذج الإيداع
   document.getElementById("submit-deposit").addEventListener("click", submitDeposit);
   document.getElementById("deposit-method").addEventListener("change", updateDepositInstructions);
-  updateDepositInstructions();
 
   // الإحالة
   document.getElementById("copy-ref-link").addEventListener("click", copyReferralLink);
@@ -868,8 +980,50 @@ function renderStoreView() {
   }
 }
 
-async function copyWalletNumber(method) {
-  const number = WALLET_COPY_VALUES[method] || WALLET_NUMBERS[method] || "";
+let customerDepositMethods = [];
+
+async function loadCustomerDepositMethods() {
+  try {
+    const res = await fetch("/api/store/deposit-methods", { headers: userHeaders() });
+    const methods = await res.json();
+    customerDepositMethods = Array.isArray(methods) ? methods : [];
+  } catch (err) {
+    customerDepositMethods = [];
+  }
+
+  // بطاقات المحافظ بشاشة الرئيسية
+  const walletList = document.getElementById("wallet-cards-list");
+  walletList.innerHTML = "";
+  customerDepositMethods.forEach((m) => {
+    const card = document.createElement("div");
+    card.className = "wallet-card";
+    card.innerHTML = `
+      <div class="wallet-card-header">
+        <span class="wallet-name">${m.name}</span>
+        <button class="icon-btn copy-wallet">نسخ الرقم</button>
+      </div>
+      <span class="wallet-number">${m.display_value}</span>
+    `;
+    walletList.appendChild(card);
+    card.querySelector(".copy-wallet").addEventListener("click", () => copyWalletNumber(m.id));
+  });
+
+  // قائمة طرق الدفع بنافذة الإيداع
+  const select = document.getElementById("deposit-method");
+  select.innerHTML = "";
+  customerDepositMethods.forEach((m) => {
+    const opt = document.createElement("option");
+    opt.value = m.code;
+    opt.textContent = m.name;
+    select.appendChild(opt);
+  });
+
+  updateDepositInstructions();
+}
+
+async function copyWalletNumber(methodId) {
+  const method = customerDepositMethods.find((m) => m.id === methodId);
+  const number = (method && (method.copy_value || method.display_value)) || "";
   try {
     await navigator.clipboard.writeText(number);
     alert("تم نسخ الرقم!");
@@ -939,8 +1093,7 @@ function renderServicesGrid(category) {
         }
       </div>
       <div class="scard-details">
-        <p class="scard-title">${name}</p>
-        ${subLabel ? `<span class="scard-sub">${subLabel}</span>` : ""}
+        <p class="scard-title">${name}</p>${subLabel ? `<span class="scard-sub">${subLabel}</span>` : ""}
         <span class="scard-price">${priceLabel}</span>
       </div>
       <button class="btn-primary btn-buy">اشتري</button>
@@ -1131,16 +1284,21 @@ async function loadMyOrders() {
 }
 
 function updateDepositInstructions() {
-  const method = document.getElementById("deposit-method").value;
-  document.getElementById("payment-instructions").textContent =
-    `قم بالتحويل عبر ${methodLabels[method] || method} للحساب المعتمد، ثم أدخل المبلغ ورقم العملية بالأسفل. رح تنراجع الإيداع وتُضاف القيمة لرصيدك بعد القبول.`;
+  const code = document.getElementById("deposit-method").value;
+  const method = customerDepositMethods.find((m) => m.code === code);
+  const name = (method && method.name) || methodLabels[code] || code;
+
+  let text = `قم بالتحويل عبر ${name} للحساب المعتمد، ثم أدخل المبلغ ورقم العملية بالأسفل. رح تنراجع الإيداع وتُضاف القيمة لرصيدك بعد القبول.`;
+  if (method && method.instructions) {
+    text += ` ${method.instructions}`;
+  }
+  document.getElementById("payment-instructions").textContent = text;
 }
 
 async function submitDeposit() {
   const method = document.getElementById("deposit-method").value;
   const amount = parseFloat(document.getElementById("deposit-amount").value) || 0;
   const proofText = document.getElementById("deposit-proof-text").value.trim();
-  const proofImage = document.getElementById("deposit-proof-image").value.trim();
 
   if (amount <= 0) {
     alert("لازم تدخل مبلغ صحيح");
@@ -1155,7 +1313,6 @@ async function submitDeposit() {
         method,
         amount,
         proof_text: proofText,
-        proof_image_url: proofImage,
       }),
     });
     const data = await res.json();
@@ -1167,7 +1324,6 @@ async function submitDeposit() {
 
     document.getElementById("deposit-amount").value = "";
     document.getElementById("deposit-proof-text").value = "";
-    document.getElementById("deposit-proof-image").value = "";
 
     alert("تم إرسال طلب الإيداع، رح ينراجع من الإدارة قريباً.");
     loadMyDeposits();
