@@ -233,7 +233,8 @@ def auth():
             first_name=user.get("first_name", ""),
             username=user.get("username", ""),
         )
-        db.session.add(db_user)db.session.commit()
+        db.session.add(db_user)
+        db.session.commit()
 
     return jsonify(
         {
