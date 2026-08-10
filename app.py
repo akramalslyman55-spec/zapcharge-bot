@@ -466,11 +466,9 @@ def admin_logs():
                 "details": l.details,
                 "created_at": l.created_at.isoformat(),
             }
-            for l in logs
+for l in logs
         ]
-                           ))
-
-
+    )
 @app.route("/api/admin/services", methods=["GET"])
 @require_admin
 def list_services():
