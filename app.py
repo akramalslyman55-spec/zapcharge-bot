@@ -32,10 +32,15 @@ with app.app_context():
     db.create_all()
 
     # db.create_all() بينشئ الجداول الناقصة بس — ما بيضيف أعمدة جديدة لجدول موجود أصلاً.
-    # هالسطر بيضيف أي عمود ناقص بأمان (IF NOT EXISTS)، وما بيأثر إطلاقاً إذا العمود موجود أصلاً.
+    # هالأسطر بتضيف أي عمود ناقص بأمان (IF NOT EXISTS)، وما بتأثر إطلاقاً إذا العمود موجود أصلاً.
     from sqlalchemy import text
     try:
         db.session.execute(text("ALTER TABLE service ADD COLUMN IF NOT EXISTS input_label VARCHAR(64)"))
+        db.session.execute(text('ALTER TABLE "user" ADD COLUMN IF NOT EXISTS referral_rewarded BOOLEAN DEFAULT FALSE'))
+        db.session.execute(text("ALTER TABLE deposit_method ADD COLUMN IF NOT EXISTS currency VARCHAR(8) DEFAULT 'USD'"))
+        db.session.execute(text("ALTER TABLE deposit ADD COLUMN IF NOT EXISTS currency VARCHAR(8) DEFAULT 'USD'"))
+        db.session.execute(text("ALTER TABLE deposit ADD COLUMN IF NOT EXISTS original_amount FLOAT"))
+        db.session.execute(text("ALTER TABLE deposit ADD COLUMN IF NOT EXISTS exchange_rate FLOAT"))
         db.session.commit()
     except Exception:
         db.session.rollback()
@@ -46,17 +51,17 @@ with app.app_context():
             DepositMethod(
                 code="sham_cash", name="شام كاش",
                 display_value="bbe0fc59f6cebd27c00ec004c3d9750f",
-                copy_value=None, instructions=None, active=True, sort_order=1,
+                copy_value=None, instructions=None, active=True, sort_order=1, currency="USD",
             ),
             DepositMethod(
                 code="syriatel_cash", name="سيرياتيل كاش",
                 display_value="تأكيد رواتب بعض تطبيقات الشات للتواصل واتساب عبر 0935789062 والسحب عبر شام كاش",
-                copy_value="0935789062", instructions=None, active=True, sort_order=2,
+                copy_value="0935789062", instructions=None, active=True, sort_order=2, currency="USD",
             ),
             DepositMethod(
                 code="c_wallet", name="سي والت",
                 display_value="TKk2vYomdGSXGBus5MroZQq7MhbA8ZMDPW",
-                copy_value=None, instructions=None, active=True, sort_order=3,
+                copy_value=None, instructions=None, active=True, sort_order=3, currency="USD",
             ),
         ])
         db.session.commit()
@@ -131,10 +136,8 @@ def get_permissions(telegram_id: str) -> dict:
         "can_approve_deposits": record.can_approve_deposits,
         "can_fulfill_orders": record.can_fulfill_orders,
         "can_manage_admins": record.can_manage_admins,
-    }
-
-
-def log_action(admin_telegram_id: str, action: str, details: str = ""):
+}
+    def log_action(admin_telegram_id: str, action: str, details: str = ""):
     entry = OperationLog(
         admin_telegram_id=admin_telegram_id,
         action=action,
@@ -156,9 +159,47 @@ def send_telegram_message(chat_id: str, text: str) -> bool:
         return False
 
 
+def notify_admins_new_deposit(deposit, dep_method):
+    # بتبعت إشعار فوري لكل أدمن عنده صلاحية قبول الإيداعات (بمن فيهم المالك/المالكين)
+    recipient_ids = set(ADMIN_IDS)
+    for a in Admin.query.filter_by(can_approve_deposits=True).all():
+        recipient_ids.add(a.telegram_id)
+
+    method_name = dep_method.name if dep_method else deposit.method
+
+    if deposit.currency != "USD" and deposit.original_amount is not None:
+        amount_line = f"{deposit.original_amount:.2f} {deposit.currency} (≈ {deposit.amount:.2f}$)"
+    else:
+        amount_line = f"{deposit.amount:.2f}$"
+
+    text = (
+        "💰 طلب إيداع جديد بانتظار المراجعة\n\n"
+        f"الزبون: {deposit.user_telegram_id}\n"
+        f"الطريقة: {method_name}\n"
+        f"المبلغ: {amount_line}"
+    )
+    if deposit.proof_text:
+        text += f"\nرقم العملية: {deposit.proof_text}"
+
+    for admin_id in recipient_ids:
+        send_telegram_message(admin_id, text)
+
+
 def get_setting(key, default=None):
     s = Setting.query.filter_by(key=key).first()
     return s.value if s else default
+
+
+def get_exchange_rates() -> dict:
+    # يرجع dict {كود العملة: كم وحدة منها = 1 دولار}، مثال: {"SYP": 15000, "EGP": 50}
+    raw = get_setting("exchange_rates", "{}")
+    try:
+        rates = json.loads(raw)
+        if not isinstance(rates, dict):
+            rates = {}
+    except Exception:
+        rates = {}
+    return rates
 
 
 def set_setting(key, value):
@@ -218,6 +259,7 @@ def index():
 def auth():
     body = request.get_json(silent=True) or {}
     init_data = body.get("initData", "")
+    ref = str(body.get("ref", "")).strip()
 
     user = verify_telegram_init_data(init_data)
     if user is None:
@@ -228,10 +270,19 @@ def auth():
 
     db_user = User.query.filter_by(telegram_id=telegram_id).first()
     if db_user is None:
+        referred_by = None
+        # نسجل المُحيل فقط أول مرة يفوت فيها الزبون، وبس لو الرابط مو رابطه هو لحاله،
+        # ولو المُحيل نفسه موجود أصلاً كزبون بالنظام
+        if ref and ref != telegram_id:
+            referrer = User.query.filter_by(telegram_id=ref).first()
+            if referrer:
+                referred_by = ref
+
         db_user = User(
             telegram_id=telegram_id,
             first_name=user.get("first_name", ""),
             username=user.get("username", ""),
+            referred_by=referred_by,
         )
         db.session.add(db_user)
         db.session.commit()
@@ -250,9 +301,7 @@ def auth():
             },
         }
     )
-
-
-# ==================== STORE (USER) ENDPOINTS ====================
+    # ==================== STORE (USER) ENDPOINTS ====================
 
 @app.route("/api/store/services", methods=["GET"])
 @require_user
@@ -368,22 +417,50 @@ def store_my_orders():
 @require_user
 def store_deposit():
     body = request.get_json(silent=True) or {}
-    method = body.get("method", "").strip()
+    method_code = body.get("method", "").strip()
     try:
-        amount = float(body.get("amount", 0))
+        entered_amount = float(body.get("amount", 0))
     except (ValueError, TypeError):
-        amount = 0.0
+        entered_amount = 0.0
 
     proof_text = body.get("proof_text", "").strip()
     proof_image_url = body.get("proof_image_url", "").strip()
 
-    if not method or amount <= 0:
+    if not method_code or entered_amount <= 0:
         return jsonify({"ok": False, "error": "invalid_data"}), 400
+
+    dep_method = DepositMethod.query.filter_by(code=method_code).first()
+    method_currency = dep_method.currency if dep_method else "USD"
+
+    usd_amount = entered_amount
+    original_amount = None
+    exchange_rate = None
+
+    if method_currency != "USD":
+        rates = get_exchange_rates()
+        rate_raw = rates.get(method_currency)
+        try:
+            rate = float(rate_raw) if rate_raw else 0
+        except (ValueError, TypeError):
+            rate = 0
+
+        if rate <= 0:
+            return jsonify({"ok": False, "error": "exchange_rate_not_set"}), 400
+
+        original_amount = entered_amount
+        exchange_rate = rate
+        usd_amount = round(entered_amount / rate, 2)
+
+        if usd_amount <= 0:
+            return jsonify({"ok": False, "error": "invalid_data"}), 400
 
     deposit = Deposit(
         user_telegram_id=request.telegram_id,
-        method=method,
-        amount=amount,
+        method=method_code,
+        amount=usd_amount,
+        currency=method_currency,
+        original_amount=original_amount,
+        exchange_rate=exchange_rate,
         proof_text=proof_text or None,
         proof_image_url=proof_image_url or None,
         status="pending"
@@ -391,7 +468,9 @@ def store_deposit():
     db.session.add(deposit)
     db.session.commit()
 
-    return jsonify({"ok": True, "deposit_id": deposit.id})
+    notify_admins_new_deposit(deposit, dep_method)
+
+    return jsonify({"ok": True, "deposit_id": deposit.id, "usd_amount": usd_amount})
 
 
 @app.route("/api/store/my-deposits", methods=["GET"])
@@ -403,6 +482,9 @@ def store_my_deposits():
             "id": d.id,
             "method": d.method,
             "amount": d.amount,
+            "currency": d.currency,
+            "original_amount": d.original_amount,
+            "exchange_rate": d.exchange_rate,
             "proof_text": d.proof_text,
             "status": d.status,
             "reject_reason": d.reject_reason,
@@ -467,9 +549,11 @@ def admin_logs():
                 "details": l.details,
                 "created_at": l.created_at.isoformat(),
             }
-for l in logs
+            for l in logs
         ]
     )
+
+
 @app.route("/api/admin/services", methods=["GET"])
 @require_admin
 def list_services():
@@ -600,6 +684,9 @@ def list_deposits():
             "user_telegram_id": d.user_telegram_id,
             "method": d.method,
             "amount": d.amount,
+            "currency": d.currency,
+            "original_amount": d.original_amount,
+            "exchange_rate": d.exchange_rate,
             "proof_text": d.proof_text,
             "proof_image_url": d.proof_image_url,
         }
@@ -621,6 +708,31 @@ def approve_deposit(deposit_id):
     user.balance += deposit.amount
     deposit.status = "approved"
     log_action(request.telegram_id, "قبول إيداع", f"{deposit.amount:.2f}$ - {deposit.user_telegram_id}")
+
+    # مكافأة الإحالة: بس عن أول إيداع مقبول لهاد الزبون، وبس لو إله مُحيل مسجل
+    if user.referred_by and not user.referral_rewarded:
+        referrer = User.query.filter_by(telegram_id=user.referred_by).first()
+        if referrer:
+            try:
+                percent = float(get_setting("referral_percent", "0") or 0)
+            except (ValueError, TypeError):
+                percent = 0
+
+            if percent > 0:
+                reward = round(deposit.amount * percent / 100.0, 2)
+                if reward > 0:
+                    referrer.balance += reward
+                    log_action(
+                        request.telegram_id,
+                        "مكافأة إحالة",
+                        f"{reward:.2f}$ لـ {referrer.telegram_id} (عن إيداع {user.telegram_id})",
+                    )
+                    send_telegram_message(
+                        referrer.telegram_id,
+                        f"🎉 حصلت على مكافأة إحالة بقيمة {reward:.2f}$ لأنه صديقك اللي دعيته أودع لأول مرة! تمت إضافتها لرصيدك."
+                    )
+        user.referral_rewarded = True
+
     db.session.commit()
 
     send_telegram_message(deposit.user_telegram_id, f"✅ تم قبول إيداعك بقيمة {deposit.amount:.2f}$ وتمت إضافتها لحسابك!")
@@ -702,23 +814,31 @@ def cancel_order(order_id):
 
     reason_msg = f"\nالسبب: {order.cancel_reason}" if order.cancel_reason else ""
     send_telegram_message(order.user_telegram_id, f"❌ تم إلغاء طلبك #{order.id} وإعادة المبلغ ({order.price:.2f}$) لحسابك.{reason_msg}")
-    return jsonify({"ok": True})# ==================== DEPOSIT METHODS ====================
+    return jsonify({"ok": True})
+
+
+# ==================== DEPOSIT METHODS ====================
 
 @app.route("/api/store/deposit-methods", methods=["GET"])
 @require_user
 def store_deposit_methods():
     methods = DepositMethod.query.filter_by(active=True).order_by(DepositMethod.sort_order, DepositMethod.id).all()
-    return jsonify([
-        {
-            "id": m.id,
-            "code": m.code,
-            "name": m.name,
-            "display_value": m.display_value,
-            "copy_value": m.copy_value,
-            "instructions": m.instructions,
-        }
-        for m in methods
-    ])
+
+    return jsonify({
+        "exchange_rates": get_exchange_rates(),
+        "methods": [
+            {
+                "id": m.id,
+                "code": m.code,
+                "name": m.name,
+                "display_value": m.display_value,
+                "copy_value": m.copy_value,
+                "instructions": m.instructions,
+                "currency": m.currency,
+            }
+            for m in methods
+        ],
+    })
 
 
 @app.route("/api/admin/deposit-methods", methods=["GET"])
@@ -735,6 +855,7 @@ def admin_deposit_methods():
             "instructions": m.instructions,
             "active": m.active,
             "sort_order": m.sort_order,
+            "currency": m.currency,
         }
         for m in methods
     ])
@@ -758,78 +879,42 @@ def _slugify_method_code(name, existing_id=None):
 @app.route("/api/admin/deposit-methods", methods=["POST"])
 @require_admin
 def add_deposit_method():
-    body = request.get_json(silent=True) or {}
-    name = (body.get("name") or "").strip()
-    display_value = (body.get("display_value") or "").strip()
+        body = request.get_json(silent=True) or {}
 
-    if not name or not display_value:
-        return jsonify({"ok": False, "error": "missing_fields"}), 400
+    if "referral_percent" in body:
+        try:
+            percent = float(body["referral_percent"])
+        except (ValueError, TypeError):
+            return jsonify({"ok": False, "error": "invalid_referral_percent"}), 400
+        if percent < 0 or percent > 100:
+            return jsonify({"ok": False, "error": "invalid_referral_percent"}), 400
+        set_setting("referral_percent", str(percent))
+        log_action(request.telegram_id, "تعديل نسبة الإحالة", f"{percent}%")
 
-    method = DepositMethod(
-        code=_slugify_method_code(name),
-        name=name,
-        display_value=display_value,
-        copy_value=(body.get("copy_value") or "").strip() or None,
-        instructions=(body.get("instructions") or "").strip() or None,
-        active=body.get("active", True),
-        sort_order=body.get("sort_order", 0),
-    )
-    db.session.add(method)
-    db.session.commit()
-    return jsonify({"ok": True, "id": method.id})
+    # exchange_rates: dict فيه عملة أو أكتر بمرة وحدة، مثال: {"SYP": 15000, "EGP": 50}
+    # كل عملة موجودة بالـdict بتتحدّث/تنضاف، وباقي العملات المخزّنة قبل هيك بتضل زي ما هي
+    if "exchange_rates" in body:
+        incoming = body["exchange_rates"]
+        if not isinstance(incoming, dict):
+            return jsonify({"ok": False, "error": "invalid_exchange_rates"}), 400
 
+        rates = get_exchange_rates()
+        for currency, rate_val in incoming.items():
+            code = str(currency).strip().upper()[:8]
+            if not code:
+                continue
+            try:
+                rate = float(rate_val)
+            except (ValueError, TypeError):
+                return jsonify({"ok": False, "error": "invalid_exchange_rates"}), 400
+            if rate <= 0:
+                return jsonify({"ok": False, "error": "invalid_exchange_rates"}), 400
+            rates[code] = rate
 
-@app.route("/api/admin/deposit-methods/<int:method_id>", methods=["PUT"])
-@require_admin
-def edit_deposit_method(method_id):
-    method = DepositMethod.query.get(method_id)
-    if not method:
-        return jsonify({"ok": False, "error": "not_found"}), 404
+        set_setting("exchange_rates", json.dumps(rates))
+        log_action(request.telegram_id, "تعديل أسعار الصرف", json.dumps(incoming, ensure_ascii=False))
 
-    body = request.get_json(silent=True) or {}
-    if "name" in body:
-        method.name = (body["name"] or "").strip()
-    if "display_value" in body:
-        method.display_value = (body["display_value"] or "").strip()
-    if "copy_value" in body:
-        method.copy_value = (body["copy_value"] or "").strip() or None
-    if "instructions" in body:
-        method.instructions = (body["instructions"] or "").strip() or None
-    if "active" in body:
-        method.active = bool(body["active"])
-    if "sort_order" in body:
-        method.sort_order = body["sort_order"]
-
-    db.session.commit()
     return jsonify({"ok": True})
-
-
-@app.route("/api/admin/deposit-methods/<int:method_id>", methods=["DELETE"])
-@require_admin
-def delete_deposit_method(method_id):
-    method = DepositMethod.query.get(method_id)
-    if not method:
-        return jsonify({"ok": False, "error": "not_found"}), 404
-    db.session.delete(method)
-    db.session.commit()
-    return jsonify({"ok": True})
-
-
-# ==================== STORE ACTIVE / PAUSED ====================
-
-@app.route("/api/admin/store-status", methods=["GET"])
-@require_admin
-def get_store_status():
-    return jsonify({"ok": True, "active": get_setting("store_active", "true") == "true"})
-
-
-@app.route("/api/admin/store-status", methods=["POST"])
-@require_admin
-def set_store_status():
-    body = request.get_json(silent=True) or {}
-    active = bool(body.get("active", True))
-    set_setting("store_active", "true" if active else "false")
-    return jsonify({"ok": True, "active": active})
 
 
 @app.route("/api/admin/admins", methods=["GET"])
