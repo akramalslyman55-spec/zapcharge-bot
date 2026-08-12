@@ -12,6 +12,10 @@ let currentBuyService = null;
 let currentCategory = "home";
 let currentSearchText = "";
 
+// رابط الإحالة إذا المستخدم فتح البوت عبره (?ref=123456789 يلي بوت.py بيمررها بالرابط)
+const urlParams = new URLSearchParams(window.location.search);
+const referralParam = urlParams.get("ref") || "";
+
 function show(id) {
   document.querySelectorAll(".screen").forEach((el) => el.classList.add("hidden"));
   document.getElementById(id).classList.remove("hidden");
@@ -32,6 +36,7 @@ function showAdminSection(id) {
   if (id === "admin-admins-section") loadAdmins();
   if (id === "admin-stats-section") loadStats();
   if (id === "admin-logs-section") loadLogs();
+  if (id === "admin-settings-section") loadGeneralSettings();
 }
 
 function adminHeaders(extra = {}) {
@@ -51,7 +56,7 @@ async function init() {
     const res = await fetch("/api/auth", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ initData: tg.initData }),
+      body: JSON.stringify({ initData: tg.initData, ref: referralParam }),
     });
     const data = await res.json();
 
@@ -144,6 +149,9 @@ function setupAdminNav(permissions) {
   document.getElementById("save-deposit-method").addEventListener("click", saveDepositMethod);
 
   document.getElementById("send-broadcast").addEventListener("click", sendBroadcast);
+
+  document.getElementById("save-referral-percent").addEventListener("click", saveReferralPercent);
+  document.getElementById("save-exchange-rate").addEventListener("click", saveExchangeRate);
 }
 
 const categoryLabels = {
@@ -271,7 +279,8 @@ function openServiceModal(service = null) {
   document.getElementById("service-category").value = service ? service.category : "games";
   document.getElementById("service-name").value = service ? service.name : "";
   document.getElementById("service-package").value = service ? (service.package_name || "") : "";
-  document.getElementById("service-input-label").value = service ? (service.input_label || "") : "";const pricingType = service ? (service.pricing_type || "fixed") : "fixed";
+  document.getElementById("service-input-label").value = service ? (service.input_label || "") : "";
+  const pricingType = service ? (service.pricing_type || "fixed") : "fixed";
   document.getElementById("service-pricing-type").value = pricingType;
 
   document.getElementById("service-price").value = service && service.price != null ? service.price : "";
@@ -420,7 +429,7 @@ function renderDepositMethodsList() {
     row.className = "service-row";
     row.innerHTML = `
       <div class="service-info">
-        <span class="service-name">${m.name}${m.active ? "" : " · موقوفة"}</span>
+        <span class="service-name">${m.name} · ${m.currency || "USD"}${m.active ? "" : " · موقوفة"}</span>
         <span class="service-meta">${m.display_value}</span>
       </div>
       <div class="service-actions">
@@ -440,6 +449,7 @@ function openDepositMethodModal(method = null) {
   document.getElementById("dm-name").value = method ? method.name : "";
   document.getElementById("dm-display-value").value = method ? method.display_value : "";
   document.getElementById("dm-copy-value").value = method ? (method.copy_value || "") : "";
+  document.getElementById("dm-currency").value = method ? (method.currency || "USD") : "USD";
   document.getElementById("dm-instructions").value = method ? (method.instructions || "") : "";
   document.getElementById("dm-active").checked = method ? method.active : true;
   document.getElementById("deposit-method-modal").classList.remove("hidden");
@@ -454,6 +464,7 @@ async function saveDepositMethod() {
     name: document.getElementById("dm-name").value.trim(),
     display_value: document.getElementById("dm-display-value").value.trim(),
     copy_value: document.getElementById("dm-copy-value").value.trim(),
+    currency: (document.getElementById("dm-currency").value.trim() || "USD").toUpperCase(),
     instructions: document.getElementById("dm-instructions").value.trim(),
     active: document.getElementById("dm-active").checked,
   };
@@ -461,6 +472,10 @@ async function saveDepositMethod() {
   if (!body.name || !body.display_value) {
     alert("لازم تكتب الاسم والرقم/النص المعروض على الأقل");
     return;
+  }
+
+  if (body.currency !== "USD") {
+    alert(`تذكير: لازم تكون مسجّل سعر صرف عملة ${body.currency} من شاشة "الإعدادات"، وإلا الزبون ما رح يقدر يودع فيها.`);
   }
 
   try {
@@ -514,13 +529,17 @@ async function loadDeposits() {
 
     list.innerHTML = "";
     deposits.forEach((d) => {
+      const amountLine =
+        d.currency && d.currency !== "USD" && d.original_amount != null
+          ? `${d.original_amount.toFixed(2)} ${d.currency} (≈ ${d.amount.toFixed(2)}$)`
+          : `${d.amount.toFixed(2)}$`;
+
       const row = document.createElement("div");
       row.className = "service-row";
       row.innerHTML = `
         <div class="service-info">
-          <span class="service-name">${methodLabels[d.method] || d.method} — ${d.amount.toFixed(2)}$</span>
-          <span class="service-meta">مستخدم: ${d.user_telegram_id}${d.proof_text ? " · رقم العملية: " + d.proof_text : ""}</span>
-        </div>
+          <span class="service-name">${methodLabels[d.method] || d.method} — ${amountLine}</span>
+          </div>
         <div class="service-actions">
           ${d.proof_image_url ? '<button class="icon-btn view-proof">الإثبات</button>' : ""}
           <button class="icon-btn approve-deposit">قبول</button>
@@ -542,7 +561,8 @@ async function loadDeposits() {
   }
 }
 
-async function approveDeposit(id) {if (!confirm("متأكد إنك بدك تقبل هاي الإيداع؟ رح تضاف القيمة لرصيد المستخدم.")) return;
+async function approveDeposit(id) {
+  if (!confirm("متأكد إنك بدك تقبل هاي الإيداع؟ رح تضاف القيمة لرصيد المستخدم.")) return;
 
   try {
     const res = await fetch(`/api/admin/deposits/${id}/approve`, {
@@ -819,7 +839,8 @@ function formatLogDate(iso) {
 }
 
 async function loadLogs() {
-  const list = document.getElementById("logs-list");list.innerHTML = '<p class="placeholder">جاري التحميل...</p>';
+  const list = document.getElementById("logs-list");
+  list.innerHTML = '<p class="placeholder">جاري التحميل...</p>';
 
   try {
     const res = await fetch("/api/admin/logs", { headers: adminHeaders() });
@@ -876,9 +897,95 @@ async function sendBroadcast() {
     resultEl.textContent =
       `تم الإرسال لـ ${data.sent} مستخدم` +
       (data.failed ? ` (فشل الإرسال لـ ${data.failed})` : "");
-    document.getElementById("broadcast-message").value = "";
+    // ==================== GENERAL SETTINGS (نسبة الإحالة + أسعار الصرف) ====================
+
+let currentExchangeRates = {};
+
+async function loadGeneralSettings() {
+  const ratesList = document.getElementById("exchange-rates-list");
+  ratesList.innerHTML = '<p class="placeholder">جاري التحميل...</p>';
+
+  try {
+    const res = await fetch("/api/admin/settings", { headers: adminHeaders() });
+    const data = await res.json();
+
+    document.getElementById("settings-referral-percent").value = data.referral_percent || "0";
+    currentExchangeRates = data.exchange_rates || {};
+    renderExchangeRatesList();
   } catch (err) {
-    resultEl.textContent = "حدث خطأ أثناء الإرسال.";
+    ratesList.innerHTML = '<p class="placeholder">حدث خطأ أثناء التحميل.</p>';
+  }
+}
+
+function renderExchangeRatesList() {
+  const ratesList = document.getElementById("exchange-rates-list");
+  const codes = Object.keys(currentExchangeRates);
+
+  if (codes.length === 0) {
+    ratesList.innerHTML = '<p class="placeholder">ما في عملات مسجّلة بعد.</p>';
+    return;
+  }
+
+  ratesList.innerHTML = "";
+  codes.forEach((code) => {
+    const row = document.createElement("div");
+    row.className = "service-row";
+    row.innerHTML = `
+      <div class="service-info">
+        <span class="service-name">${code}</span>
+        <span class="service-meta">1$ = ${currentExchangeRates[code]} ${code}</span>
+      </div>
+    `;
+    ratesList.appendChild(row);
+  });
+}
+
+async function saveReferralPercent() {
+  const percent = parseFloat(document.getElementById("settings-referral-percent").value);
+  if (isNaN(percent) || percent < 0 || percent > 100) {
+    alert("أدخل نسبة صحيحة بين 0 و100");
+    return;
+  }
+
+  try {
+    const res = await fetch("/api/admin/settings", {
+      method: "POST",
+      headers: adminHeaders({ "Content-Type": "application/json" }),
+      body: JSON.stringify({ referral_percent: percent }),
+    });
+    const data = await res.json();
+    if (data.ok) alert("تم حفظ نسبة الإحالة ✓");
+    else alert("حدث خطأ، جرّب مرة ثانية.");
+  } catch (err) {
+    alert("حدث خطأ، جرّب مرة ثانية.");
+  }
+}
+
+async function saveExchangeRate() {
+  const code = document.getElementById("new-currency-code").value.trim().toUpperCase();
+  const rate = parseFloat(document.getElementById("new-currency-rate").value);
+
+  if (!code || isNaN(rate) || rate <= 0) {
+    alert("أدخل رمز عملة وسعر صرف صحيحين");
+    return;
+  }
+
+  try {
+    const res = await fetch("/api/admin/settings", {
+      method: "POST",
+      headers: adminHeaders({ "Content-Type": "application/json" }),
+      body: JSON.stringify({ exchange_rates: { [code]: rate } }),
+    });
+    const data = await res.json();
+    if (data.ok) {
+      document.getElementById("new-currency-code").value = "";
+      document.getElementById("new-currency-rate").value = "";
+      loadGeneralSettings();
+    } else {
+      alert("حدث خطأ، جرّب مرة ثانية.");
+    }
+  } catch (err) {
+    alert("حدث خطأ، جرّب مرة ثانية.");
   }
 }
 
@@ -924,6 +1031,7 @@ function setupStoreNav() {
   // نموذج الإيداع
   document.getElementById("submit-deposit").addEventListener("click", submitDeposit);
   document.getElementById("deposit-method").addEventListener("change", updateDepositInstructions);
+  document.getElementById("deposit-amount").addEventListener("input", updateDepositAmountPreview);
 
   // الإحالة
   document.getElementById("copy-ref-link").addEventListener("click", copyReferralLink);
@@ -981,14 +1089,17 @@ function renderStoreView() {
 }
 
 let customerDepositMethods = [];
+let customerExchangeRates = {};
 
 async function loadCustomerDepositMethods() {
   try {
     const res = await fetch("/api/store/deposit-methods", { headers: userHeaders() });
-    const methods = await res.json();
-    customerDepositMethods = Array.isArray(methods) ? methods : [];
+    const data = await res.json();
+    customerDepositMethods = Array.isArray(data.methods) ? data.methods : [];
+    customerExchangeRates = data.exchange_rates || {};
   } catch (err) {
     customerDepositMethods = [];
+    customerExchangeRates = {};
   }
 
   // بطاقات المحافظ بشاشة الرئيسية
@@ -1004,6 +1115,7 @@ async function loadCustomerDepositMethods() {
       </div>
       <span class="wallet-number">${m.display_value}</span>
     `;
+
     walletList.appendChild(card);
     card.querySelector(".copy-wallet").addEventListener("click", () => copyWalletNumber(m.id));
   });
@@ -1014,7 +1126,7 @@ async function loadCustomerDepositMethods() {
   customerDepositMethods.forEach((m) => {
     const opt = document.createElement("option");
     opt.value = m.code;
-    opt.textContent = m.name;
+    opt.textContent = m.currency && m.currency !== "USD" ? `${m.name} (${m.currency})` : m.name;
     select.appendChild(opt);
   });
 
@@ -1193,6 +1305,11 @@ async function confirmBuy() {
   if (!playerId) {
     alert("لازم تدخل المعرّف/البيانات المطلوبة");
     return;
+    }
+  const playerId = document.getElementById("buy-player-id").value.trim();
+  if (!playerId) {
+    alert("لازم تدخل المعرّف/البيانات المطلوبة");
+    return;
   }
 
   const body = {
@@ -1293,6 +1410,39 @@ function updateDepositInstructions() {
     text += ` ${method.instructions}`;
   }
   document.getElementById("payment-instructions").textContent = text;
+
+  const currency = (method && method.currency) || "USD";
+  const label = document.getElementById("deposit-amount-label");
+  label.textContent = currency === "USD" ? "المبلغ ($)" : `المبلغ (${currency})`;
+
+  updateDepositAmountPreview();
+}
+
+function updateDepositAmountPreview() {
+  const code = document.getElementById("deposit-method").value;
+  const method = customerDepositMethods.find((m) => m.code === code);
+  const currency = (method && method.currency) || "USD";
+  const hintEl = document.getElementById("deposit-amount-hint");
+
+  if (currency === "USD") {
+    hintEl.textContent = "";
+    return;
+  }
+
+  const rate = customerExchangeRates[currency];
+  const amount = parseFloat(document.getElementById("deposit-amount").value) || 0;
+
+  if (!rate) {
+    hintEl.textContent = "سعر صرف هاي العملة مو محدد حالياً، تواصل مع الإدارة.";
+    return;
+  }
+
+  if (amount > 0) {
+    const usd = amount / rate;
+    hintEl.textContent = `سعر الصرف اليوم: 1$ = ${rate} ${currency} · المعادل: ≈ ${usd.toFixed(2)}$`;
+  } else {
+    hintEl.textContent = `سعر الصرف اليوم: 1$ = ${rate} ${currency}`;
+  }
 }
 
 async function submitDeposit() {
@@ -1318,12 +1468,16 @@ async function submitDeposit() {
     const data = await res.json();
 
     if (!data.ok) {
-      alert("حدث خطأ، جرّب مرة ثانية.");
+      const errorMessages = {
+        exchange_rate_not_set: "سعر صرف هاي العملة مو محدد حالياً، تواصل مع الإدارة.",
+      };
+      alert(errorMessages[data.error] || "حدث خطأ، جرّب مرة ثانية.");
       return;
     }
 
     document.getElementById("deposit-amount").value = "";
     document.getElementById("deposit-proof-text").value = "";
+    document.getElementById("deposit-amount-hint").textContent = "";
 
     alert("تم إرسال طلب الإيداع، رح ينراجع من الإدارة قريباً.");
     loadMyDeposits();
@@ -1349,11 +1503,16 @@ async function loadMyDeposits() {
 
     list.innerHTML = "";
     deposits.forEach((d) => {
+      const amountLine =
+        d.currency && d.currency !== "USD" && d.original_amount != null
+          ? `${d.original_amount.toFixed(2)} ${d.currency} (≈ ${d.amount.toFixed(2)}$)`
+          : `${d.amount.toFixed(2)}$`;
+
       const row = document.createElement("div");
       row.className = "service-row";
       row.innerHTML = `
         <div class="service-info">
-          <span class="service-name">${methodLabels[d.method] || d.method} — ${d.amount.toFixed(2)}$</span>
+          <span class="service-name">${methodLabels[d.method] || d.method} — ${amountLine}</span>
           <span class="service-meta">${d.reject_reason ? "السبب: " + d.reject_reason : ""}</span>
         </div>
         <span class="status-badge ${d.status}">${statusLabels[d.status] || d.status}</span>
