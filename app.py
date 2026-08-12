@@ -137,7 +137,7 @@ def get_permissions(telegram_id: str) -> dict:
         "can_fulfill_orders": record.can_fulfill_orders,
         "can_manage_admins": record.can_manage_admins,
 }
-    def log_action(admin_telegram_id: str, action: str, details: str = ""):
+def log_action(admin_telegram_id: str, action: str, details: str = ""):
     entry = OperationLog(
         admin_telegram_id=admin_telegram_id,
         action=action,
