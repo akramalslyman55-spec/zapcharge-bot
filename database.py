@@ -11,6 +11,11 @@ class User(db.Model):
     username = db.Column(db.String(128))
     balance = db.Column(db.Float, default=0.0)
     referred_by = db.Column(db.String(32), nullable=True)
+
+    # صار True أول ما ينضاف للمُحيل مكافأة الإحالة (عن أول إيداع لهاد المستخدم)
+    # منستخدمه عشان نمنع تكرار المكافأة لو المستخدم أودع أكتر من مرة
+    referral_rewarded = db.Column(db.Boolean, default=False)
+
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
 
@@ -60,7 +65,16 @@ class Deposit(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     user_telegram_id = db.Column(db.String(32))
     method = db.Column(db.String(32))
+
+    # amount هي دايماً القيمة بالدولار (هاي يلي بتنضاف لرصيد الزبون عند القبول)
     amount = db.Column(db.Float)
+
+    # لو طريقة الإيداع كانت بعملة غير الدولار، منخزن هون المبلغ الأصلي وسعر الصرف
+    # يلي استُخدم وقت التقديم (للمراجعة ومطابقة سكرين شوت التحويل). لو الطريقة دولار، تضل فاضية
+    currency = db.Column(db.String(8), default="USD", nullable=False)
+    original_amount = db.Column(db.Float, nullable=True)
+    exchange_rate = db.Column(db.Float, nullable=True)
+
     proof_text = db.Column(db.String(256), nullable=True)
     proof_image_url = db.Column(db.String(256), nullable=True)
     status = db.Column(db.String(16), default="pending")
@@ -86,7 +100,10 @@ class OperationLog(db.Model):
 
 
 class Setting(db.Model):
-    # جدول عام لأي إعداد بسيط (key/value)، أول استخدام له: إيقاف/تشغيل المتجر مؤقتًا
+    # جدول عام لأي إعداد بسيط (key/value)
+    # المفاتيح المستخدمة حالياً: store_active, referral_percent
+    # exchange_rates: نص JSON فيه أسعار صرف كل العملات غير الدولار، مثال: {"SYP": 15000, "EGP": 50}
+    # (كم وحدة من هاي العملة = دولار واحد)، بتتحدث من لوحة الإدارة وبتضم أي عدد من العملات
     id = db.Column(db.Integer, primary_key=True)
     key = db.Column(db.String(64), unique=True, nullable=False)
     value = db.Column(db.String(256), nullable=True)
@@ -101,3 +118,7 @@ class DepositMethod(db.Model):
     instructions = db.Column(db.String(512), nullable=True)        # تعليمات إضافية اختيارية
     active = db.Column(db.Boolean, default=True)
     sort_order = db.Column(db.Integer, default=0)
+
+    # عملة هاي الطريقة: "USD" أو أي رمز عملة تانية (SYP، EGP، إلخ)
+    # لو مو USD، بيتحول المبلغ للدولار بسعر الصرف المخزّن بجدول Setting (مفتاح exchange_rates)
+    currency = db.Column(db.String(8), default="USD", nullable=False)
