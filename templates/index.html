@@ -101,8 +101,9 @@
           قم بالتحويل للحساب، ثم أدخل المبلغ ورقم العملية بالأسفل.
         </div>
 
-        <label class="field-label">المبلغ ($)</label>
+        <label class="field-label" id="deposit-amount-label">المبلغ ($)</label>
         <input id="deposit-amount" class="field-input" type="number" step="0.1" placeholder="مثال: 5.00" />
+        <p class="section-desc" id="deposit-amount-hint"></p>
 
         <label class="field-label">رقم العملية / الإشعار</label>
         <input id="deposit-proof-text" class="field-input" type="text" placeholder="رقم التحويل أو الإشعار" />
@@ -208,6 +209,7 @@
       <button class="nav-btn" data-admin-section="admin-broadcast-section" data-permission="can_manage_admins">رسالة جماعية</button>
       <button class="nav-btn" data-admin-section="admin-stats-section">الأرباح</button>
       <button class="nav-btn" data-admin-section="admin-logs-section">سجل العمليات</button>
+      <button class="nav-btn" data-admin-section="admin-settings-section" data-permission="can_manage_admins">الإعدادات</button>
     </nav>
 
     <main class="content">
@@ -267,6 +269,24 @@
 
       <div id="admin-logs-section" class="admin-section hidden">
         <div id="logs-list" class="services-list"></div>
+      </div>
+
+      <div id="admin-settings-section" class="admin-section hidden">
+        <h4 class="sub-title">نسبة مكافأة الإحالة</h4>
+        <p class="section-desc">النسبة يلي بتنضاف لرصيد المُحيل تلقائيًا عن أول إيداع مقبول للزبون يلي حوّله (مثال: اكتب 2 يعني 2%)</p>
+        <label class="field-label">النسبة (%)</label>
+        <input id="settings-referral-percent" class="field-input" type="number" step="0.1" min="0" max="100" placeholder="مثال: 2" />
+        <button class="btn-primary" id="save-referral-percent">حفظ النسبة</button>
+
+        <h4 class="sub-title" style="margin-top: 24px;">أسعار صرف العملات مقابل الدولار</h4>
+        <p class="section-desc">لأي عملة غير الدولار تستخدمها بطرق الإيداع (ليرة سورية، جنيه مصري، إلخ) — حدد كم وحدة منها تساوي دولار واحد. حدّثها كل ما تغيّر الصرف.</p>
+        <div id="exchange-rates-list" class="services-list"></div>
+
+        <label class="field-label" style="margin-top: 12px;">رمز العملة</label>
+        <input id="new-currency-code" class="field-input" type="text" placeholder="مثال: SYP" style="text-transform:uppercase;" />
+        <label class="field-label">كم وحدة = دولار واحد</label>
+        <input id="new-currency-rate" class="field-input" type="number" step="0.01" placeholder="مثال: 15000" />
+        <button class="btn-primary" id="save-exchange-rate">حفظ سعر الصرف</button>
       </div>
     </main>
 
@@ -387,6 +407,10 @@
         <label class="field-label">الرقم/النص يلي بينسخ عند الضغط (اختياري)</label>
         <input id="dm-copy-value" class="field-input" type="text" placeholder="اتركه فاضي لو نفس الرقم فوق" />
 
+        <label class="field-label">رمز العملة</label>
+        <input id="dm-currency" class="field-input" type="text" placeholder="USD" style="text-transform:uppercase;" />
+        <p class="section-desc">اكتب USD للدولار، أو رمز أي عملة تانية (مثال: SYP لليرة السورية، EGP للجنيه المصري) — بشرط تكون مسجّل سعر صرفها من شاشة "الإعدادات" أول.</p>
+
         <label class="field-label">تعليمات إضافية (اختياري)</label>
         <textarea id="dm-instructions" class="field-input" rows="3" placeholder="أي ملاحظة إضافية تبين تحت الرقم"></textarea>
 
@@ -405,4 +429,4 @@
 
   <script src="/static/js/app.js"></script>
 </body>
-</html>
+          </html>
