@@ -477,9 +477,9 @@ def store_deposit():
     return jsonify({"ok": True, "deposit_id": deposit.id, "usd_amount": usd_amount})
 
 
-@app.route("/api/store/my-deposits", methods=["GET"])
-@require_user
-def store_my_deposits():
+@app.route("/api/admin/services", methods=["GET"])
+@require_admin
+def list_services():
     deposits = Deposit.query.filter_by(user_telegram_id=request.telegram_id).order_by(Deposit.created_at.desc()).all()
     return jsonify([
         {
