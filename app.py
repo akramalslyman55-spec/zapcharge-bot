@@ -556,7 +556,9 @@ def admin_logs():
             for l in logs
         ]
         )
-    @app.route("/api/admin/services", methods=["GET"])
+
+
+@app.route("/api/admin/services", methods=["GET"])
 @require_admin
 def list_services():
     services = Service.query.order_by(Service.category, Service.name).all()
@@ -600,7 +602,7 @@ def add_service():
 
     if pricing_type == "variable":
         service.price = None
-        service.unit_name = body.get("unit_name") or None
+              service.unit_name = body.get("unit_name") or None
         service.unit_rate = float(body.get("unit_rate", 0)) if body.get("unit_rate") not in (None, "") else None
         service.min_qty = int(body.get("min_qty")) if body.get("min_qty") not in (None, "") else None
         service.max_qty = int(body.get("max_qty")) if body.get("max_qty") not in (None, "") else None
