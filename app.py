@@ -136,7 +136,9 @@ def get_permissions(telegram_id: str) -> dict:
         "can_approve_deposits": record.can_approve_deposits,
         "can_fulfill_orders": record.can_fulfill_orders,
         "can_manage_admins": record.can_manage_admins,
-}
+    }
+
+
 def log_action(admin_telegram_id: str, action: str, details: str = ""):
     entry = OperationLog(
         admin_telegram_id=admin_telegram_id,
@@ -301,7 +303,9 @@ def auth():
             },
         }
     )
-    # ==================== STORE (USER) ENDPOINTS ====================
+
+
+# ==================== STORE (USER) ENDPOINTS ====================
 
 @app.route("/api/store/services", methods=["GET"])
 @require_user
@@ -551,10 +555,8 @@ def admin_logs():
             }
             for l in logs
         ]
-    )
-
-
-@app.route("/api/admin/services", methods=["GET"])
+        )
+    @app.route("/api/admin/services", methods=["GET"])
 @require_admin
 def list_services():
     services = Service.query.order_by(Service.category, Service.name).all()
@@ -854,6 +856,7 @@ def admin_deposit_methods():
             "copy_value": m.copy_value,
             "instructions": m.instructions,
             "active": m.active,
+    "active": m.active,
             "sort_order": m.sort_order,
             "currency": m.currency,
         }
@@ -879,7 +882,101 @@ def _slugify_method_code(name, existing_id=None):
 @app.route("/api/admin/deposit-methods", methods=["POST"])
 @require_admin
 def add_deposit_method():
-        body = request.get_json(silent=True) or {}
+    body = request.get_json(silent=True) or {}
+    name = (body.get("name") or "").strip()
+    display_value = (body.get("display_value") or "").strip()
+
+    if not name or not display_value:
+        return jsonify({"ok": False, "error": "missing_fields"}), 400
+
+    currency = (body.get("currency") or "USD").strip().upper()[:8] or "USD"
+
+    method = DepositMethod(
+        code=_slugify_method_code(name),
+        name=name,
+        display_value=display_value,
+        copy_value=(body.get("copy_value") or "").strip() or None,
+        instructions=(body.get("instructions") or "").strip() or None,
+        active=body.get("active", True),
+        sort_order=body.get("sort_order", 0),
+        currency=currency,
+    )
+    db.session.add(method)
+    db.session.commit()
+    return jsonify({"ok": True, "id": method.id})
+
+
+@app.route("/api/admin/deposit-methods/<int:method_id>", methods=["PUT"])
+@require_admin
+def edit_deposit_method(method_id):
+    method = DepositMethod.query.get(method_id)
+    if not method:
+        return jsonify({"ok": False, "error": "not_found"}), 404
+
+    body = request.get_json(silent=True) or {}
+    if "name" in body:
+        method.name = (body["name"] or "").strip()
+    if "display_value" in body:
+        method.display_value = (body["display_value"] or "").strip()
+    if "copy_value" in body:
+        method.copy_value = (body["copy_value"] or "").strip() or None
+    if "instructions" in body:
+        method.instructions = (body["instructions"] or "").strip() or None
+    if "active" in body:
+        method.active = bool(body["active"])
+    if "sort_order" in body:
+        method.sort_order = body["sort_order"]
+    if "currency" in body:
+        method.currency = (body["currency"] or "USD").strip().upper()[:8] or "USD"
+
+    db.session.commit()
+    return jsonify({"ok": True})
+
+
+@app.route("/api/admin/deposit-methods/<int:method_id>", methods=["DELETE"])
+@require_admin
+def delete_deposit_method(method_id):
+    method = DepositMethod.query.get(method_id)
+    if not method:
+        return jsonify({"ok": False, "error": "not_found"}), 404
+    db.session.delete(method)
+    db.session.commit()
+    return jsonify({"ok": True})
+
+
+# ==================== STORE ACTIVE / PAUSED ====================
+
+@app.route("/api/admin/store-status", methods=["GET"])
+@require_admin
+def get_store_status():
+    return jsonify({"ok": True, "active": get_setting("store_active", "true") == "true"})
+
+
+@app.route("/api/admin/store-status", methods=["POST"])
+@require_admin
+def set_store_status():
+    body = request.get_json(silent=True) or {}
+    active = bool(body.get("active", True))
+    set_setting("store_active", "true" if active else "false")
+    return jsonify({"ok": True, "active": active})
+
+
+# ==================== GENERAL SETTINGS (نسبة الإحالة + سعر الصرف) ====================
+
+@app.route("/api/admin/settings", methods=["GET"])
+@require_admin
+def get_general_settings():
+    return jsonify({
+        "ok": True,
+        "referral_percent": get_setting("referral_percent", "0"),
+        "exchange_rates": get_exchange_rates(),
+    })
+
+
+@app.route("/api/admin/settings", methods=["POST"])
+@require_admin
+def set_general_settings():
+    body = request.get_json(silent=True) or {}
 
     if "referral_percent" in body:
         try:
