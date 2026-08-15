@@ -940,9 +940,19 @@ function renderExchangeRatesList() {
         <span class="service-name">${code}</span>
         <span class="service-meta">1$ = ${currentExchangeRates[code]} ${code}</span>
       </div>
+      <div class="service-actions">
+        <button class="icon-btn edit-rate" data-code="${code}">تعديل</button>
+      </div>
     `;
     ratesList.appendChild(row);
+    row.querySelector(".edit-rate").addEventListener("click", () => editExchangeRate(code));
   });
+}
+
+function editExchangeRate(code) {
+  document.getElementById("new-currency-code").value = code;
+  document.getElementById("new-currency-rate").value = currentExchangeRates[code];
+  document.getElementById("new-currency-rate").focus();
 }
 
 async function saveReferralPercent() {
