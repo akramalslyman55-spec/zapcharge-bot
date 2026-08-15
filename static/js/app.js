@@ -539,7 +539,7 @@ async function loadDeposits() {
       row.innerHTML = `
         <div class="service-info">
           <span class="service-name">${methodLabels[d.method] || d.method} — ${amountLine}</span>
-          </div>
+        </div>
         <div class="service-actions">
           ${d.proof_image_url ? '<button class="icon-btn view-proof">الإثبات</button>' : ""}
           <button class="icon-btn approve-deposit">قبول</button>
@@ -897,7 +897,12 @@ async function sendBroadcast() {
     resultEl.textContent =
       `تم الإرسال لـ ${data.sent} مستخدم` +
       (data.failed ? ` (فشل الإرسال لـ ${data.failed})` : "");
-    // ==================== GENERAL SETTINGS (نسبة الإحالة + أسعار الصرف) ====================
+  } catch (err) {
+    resultEl.textContent = "حدث خطأ أثناء الإرسال.";
+  }
+}
+
+// ==================== GENERAL SETTINGS (نسبة الإحالة + أسعار الصرف) ====================
 
 let currentExchangeRates = {};
 
@@ -1301,11 +1306,6 @@ function closeBuyModal() {
 async function confirmBuy() {
   if (!currentBuyService) return;
 
-  const playerId = document.getElementById("buy-player-id").value.trim();
-  if (!playerId) {
-    alert("لازم تدخل المعرّف/البيانات المطلوبة");
-    return;
-    }
   const playerId = document.getElementById("buy-player-id").value.trim();
   if (!playerId) {
     alert("لازم تدخل المعرّف/البيانات المطلوبة");
