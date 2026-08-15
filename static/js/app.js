@@ -942,10 +942,12 @@ function renderExchangeRatesList() {
       </div>
       <div class="service-actions">
         <button class="icon-btn edit-rate" data-code="${code}">تعديل</button>
+        <button class="icon-btn danger delete-rate" data-code="${code}">حذف</button>
       </div>
     `;
     ratesList.appendChild(row);
     row.querySelector(".edit-rate").addEventListener("click", () => editExchangeRate(code));
+    row.querySelector(".delete-rate").addEventListener("click", () => deleteExchangeRate(code));
   });
 }
 
@@ -953,6 +955,26 @@ function editExchangeRate(code) {
   document.getElementById("new-currency-code").value = code;
   document.getElementById("new-currency-rate").value = currentExchangeRates[code];
   document.getElementById("new-currency-rate").focus();
+}
+
+async function deleteExchangeRate(code) {
+  if (!confirm(`متأكد إنك بدك تحذف عملة ${code}؟ أي طريقة إيداع مربوطة فيها ما رح تشتغل لحد ما تحدد سعر صرف جديد.`)) return;
+
+  try {
+    const res = await fetch("/api/admin/settings/delete-exchange-rate", {
+      method: "POST",
+      headers: adminHeaders({ "Content-Type": "application/json" }),
+      body: JSON.stringify({ currency: code }),
+    });
+    const data = await res.json();
+    if (data.ok) {
+      loadGeneralSettings();
+    } else {
+      alert("حدث خطأ، جرّب مرة ثانية.");
+    }
+  } catch (err) {
+    alert("حدث خطأ، جرّب مرة ثانية.");
+  }
 }
 
 async function saveReferralPercent() {
