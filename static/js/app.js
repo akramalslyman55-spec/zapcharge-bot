@@ -147,6 +147,7 @@ function setupAdminNav(permissions) {
   document.getElementById("open-add-deposit-method").addEventListener("click", () => openDepositMethodModal());
   document.getElementById("cancel-deposit-method-modal").addEventListener("click", closeDepositMethodModal);
   document.getElementById("save-deposit-method").addEventListener("click", saveDepositMethod);
+  document.getElementById("dm-add-custom-field").addEventListener("click", () => addCustomFieldRow());
 
   document.getElementById("send-broadcast").addEventListener("click", sendBroadcast);
 
@@ -425,12 +426,18 @@ function renderDepositMethodsList() {
 
   list.innerHTML = "";
   allDepositMethods.forEach((m) => {
+    const fieldsCount = Array.isArray(m.custom_fields) ? m.custom_fields.length : 0;
+    const extras = [
+      m.requires_proof_image ? "صورة إثبات" : null,
+      fieldsCount ? `${fieldsCount} حقل إضافي` : null,
+    ].filter(Boolean).join(" · ");
+
     const row = document.createElement("div");
     row.className = "service-row";
     row.innerHTML = `
       <div class="service-info">
         <span class="service-name">${m.name} · ${m.currency || "USD"}${m.active ? "" : " · موقوفة"}</span>
-        <span class="service-meta">${m.display_value}</span>
+        <span class="service-meta">${m.display_value}${extras ? " · " + extras : ""}</span>
       </div>
       <div class="service-actions">
         <button class="icon-btn edit-dm" data-id="${m.id}">تعديل</button>
@@ -451,8 +458,30 @@ function openDepositMethodModal(method = null) {
   document.getElementById("dm-copy-value").value = method ? (method.copy_value || "") : "";
   document.getElementById("dm-currency").value = method ? (method.currency || "USD") : "USD";
   document.getElementById("dm-instructions").value = method ? (method.instructions || "") : "";
+  document.getElementById("dm-requires-proof").checked = method ? !!method.requires_proof_image : false;
   document.getElementById("dm-active").checked = method ? method.active : true;
+
+  const fieldsList = document.getElementById("dm-custom-fields-list");
+  fieldsList.innerHTML = "";
+  const existingFields = method && Array.isArray(method.custom_fields) ? method.custom_fields : [];
+  existingFields.forEach((label) => addCustomFieldRow(label));
+
   document.getElementById("deposit-method-modal").classList.remove("hidden");
+}
+
+function addCustomFieldRow(value = "") {
+  const fieldsList = document.getElementById("dm-custom-fields-list");
+  const row = document.createElement("div");
+  row.className = "custom-field-row";
+  row.style.display = "flex";
+  row.style.gap = "8px";
+  row.style.marginTop = "8px";
+  row.innerHTML = `
+    <input class="field-input dm-custom-field-input" type="text" placeholder="مثال: اسم صاحب الحساب" value="${value.replace(/"/g, "&quot;")}" style="flex:1;" />
+    <button type="button" class="icon-btn danger remove-custom-field">حذف</button>
+  `;
+  fieldsList.appendChild(row);
+  row.querySelector(".remove-custom-field").addEventListener("click", () => row.remove());
 }
 
 function closeDepositMethodModal() {
@@ -460,12 +489,18 @@ function closeDepositMethodModal() {
 }
 
 async function saveDepositMethod() {
+  const customFields = Array.from(document.querySelectorAll(".dm-custom-field-input"))
+    .map((input) => input.value.trim())
+    .filter((v) => v);
+
   const body = {
     name: document.getElementById("dm-name").value.trim(),
     display_value: document.getElementById("dm-display-value").value.trim(),
     copy_value: document.getElementById("dm-copy-value").value.trim(),
     currency: (document.getElementById("dm-currency").value.trim() || "USD").toUpperCase(),
     instructions: document.getElementById("dm-instructions").value.trim(),
+    requires_proof_image: document.getElementById("dm-requires-proof").checked,
+    custom_fields: customFields,
     active: document.getElementById("dm-active").checked,
   };
 
@@ -534,11 +569,17 @@ async function loadDeposits() {
           ? `${d.original_amount.toFixed(2)} ${d.currency} (≈ ${d.amount.toFixed(2)}$)`
           : `${d.amount.toFixed(2)}$`;
 
+      const customFieldsLine = d.custom_field_values && Object.keys(d.custom_field_values).length
+        ? Object.entries(d.custom_field_values).map(([k, v]) => `${k}: ${v}`).join(" · ")
+        : "";
+      const metaParts = [d.proof_text ? "رقم العملية: " + d.proof_text : "", customFieldsLine].filter(Boolean);
+
       const row = document.createElement("div");
       row.className = "service-row";
       row.innerHTML = `
         <div class="service-info">
           <span class="service-name">${methodLabels[d.method] || d.method} — ${amountLine}</span>
+          ${metaParts.length ? `<span class="service-meta">${metaParts.join(" · ")}</span>` : ""}
         </div>
         <div class="service-actions">
           ${d.proof_image_url ? '<button class="icon-btn view-proof">الإثبات</button>' : ""}
@@ -1069,6 +1110,10 @@ function setupStoreNav() {
   document.getElementById("submit-deposit").addEventListener("click", submitDeposit);
   document.getElementById("deposit-method").addEventListener("change", updateDepositInstructions);
   document.getElementById("deposit-amount").addEventListener("input", updateDepositAmountPreview);
+  document.getElementById("deposit-upload-image-btn").addEventListener("click", () => {
+    document.getElementById("deposit-proof-image-file").click();
+  });
+  document.getElementById("deposit-proof-image-file").addEventListener("change", handleDepositProofUpload);
 
   // الإحالة
   document.getElementById("copy-ref-link").addEventListener("click", copyReferralLink);
@@ -1447,7 +1492,72 @@ function updateDepositInstructions() {
   const label = document.getElementById("deposit-amount-label");
   label.textContent = currency === "USD" ? "المبلغ ($)" : `المبلغ (${currency})`;
 
+  renderDepositExtraFields(method);
   updateDepositAmountPreview();
+}
+
+function renderDepositExtraFields(method) {
+  const proofGroup = document.getElementById("deposit-proof-image-group");
+  const requiresProof = !!(method && method.requires_proof_image);
+  proofGroup.classList.toggle("hidden", !requiresProof);
+  if (!requiresProof) {
+    document.getElementById("deposit-proof-image").value = "";
+    document.getElementById("deposit-proof-image-preview").classList.add("hidden");
+    document.getElementById("deposit-proof-image-preview").src = "";
+    document.getElementById("deposit-upload-status").classList.add("hidden");
+    document.getElementById("deposit-upload-status").textContent = "";
+  }
+
+  const customFieldsWrap = document.getElementById("deposit-custom-fields");
+  const fields = (method && Array.isArray(method.custom_fields)) ? method.custom_fields : [];
+  customFieldsWrap.classList.toggle("hidden", fields.length === 0);
+  customFieldsWrap.innerHTML = "";
+  fields.forEach((label, idx) => {
+    const wrap = document.createElement("div");
+    wrap.innerHTML = `
+      <label class="field-label">${label}</label>
+      <input class="field-input deposit-custom-field-input" type="text" data-label="${label.replace(/"/g, "&quot;")}" placeholder="${label}" />
+    `;
+    customFieldsWrap.appendChild(wrap);
+  });
+}
+
+async function handleDepositProofUpload(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+
+  const statusEl = document.getElementById("deposit-upload-status");
+  const previewEl = document.getElementById("deposit-proof-image-preview");
+
+  statusEl.textContent = "جاري رفع الصورة...";
+  statusEl.classList.remove("hidden");
+
+  try {
+    const formData = new FormData();
+    formData.append("key", IMGBB_API_KEY);
+    formData.append("image", file);
+
+    const res = await fetch("https://api.imgbb.com/1/upload", {
+      method: "POST",
+      body: formData,
+    });
+    const data = await res.json();
+
+    if (!data.success) {
+      statusEl.textContent = `فشل رفع الصورة: HTTP ${res.status}`;
+      return;
+    }
+
+    const url = data.data.url;
+    document.getElementById("deposit-proof-image").value = url;
+    previewEl.src = url;
+    previewEl.classList.remove("hidden");
+    statusEl.textContent = "تم رفع الصورة بنجاح ✓";
+  } catch (err) {
+    statusEl.textContent = "فشل رفع الصورة: " + (err && err.message ? err.message : "خطأ اتصال غير معروف");
+  } finally {
+    event.target.value = "";
+  }
 }
 
 function updateDepositAmountPreview() {
@@ -1478,13 +1588,32 @@ function updateDepositAmountPreview() {
 }
 
 async function submitDeposit() {
-  const method = document.getElementById("deposit-method").value;
+  const methodCode = document.getElementById("deposit-method").value;
+  const method = customerDepositMethods.find((m) => m.code === methodCode);
   const amount = parseFloat(document.getElementById("deposit-amount").value) || 0;
   const proofText = document.getElementById("deposit-proof-text").value.trim();
+  const proofImageUrl = document.getElementById("deposit-proof-image").value.trim();
 
   if (amount <= 0) {
     alert("لازم تدخل مبلغ صحيح");
     return;
+  }
+
+  if (method && method.requires_proof_image && !proofImageUrl) {
+    alert("لازم ترفع صورة إثبات التحويل لهاي الطريقة");
+    return;
+  }
+
+  const customFieldValues = {};
+  if (method && Array.isArray(method.custom_fields)) {
+    for (const input of document.querySelectorAll(".deposit-custom-field-input")) {
+      const value = input.value.trim();
+      if (!value) {
+        alert(`لازم تعبّي حقل "${input.dataset.label}"`);
+        return;
+      }
+      customFieldValues[input.dataset.label] = value;
+    }
   }
 
   try {
@@ -1492,9 +1621,11 @@ async function submitDeposit() {
       method: "POST",
       headers: userHeaders({ "Content-Type": "application/json" }),
       body: JSON.stringify({
-        method,
+        method: methodCode,
         amount,
         proof_text: proofText,
+        proof_image_url: proofImageUrl,
+        custom_field_values: customFieldValues,
       }),
     });
     const data = await res.json();
@@ -1502,6 +1633,8 @@ async function submitDeposit() {
     if (!data.ok) {
       const errorMessages = {
         exchange_rate_not_set: "سعر صرف هاي العملة مو محدد حالياً، تواصل مع الإدارة.",
+        proof_image_required: "لازم ترفع صورة إثبات التحويل لهاي الطريقة.",
+        missing_custom_fields: "لازم تعبّي كل الحقول المطلوبة.",
       };
       alert(errorMessages[data.error] || "حدث خطأ، جرّب مرة ثانية.");
       return;
@@ -1510,6 +1643,10 @@ async function submitDeposit() {
     document.getElementById("deposit-amount").value = "";
     document.getElementById("deposit-proof-text").value = "";
     document.getElementById("deposit-amount-hint").textContent = "";
+    document.getElementById("deposit-proof-image").value = "";
+    document.getElementById("deposit-proof-image-preview").classList.add("hidden");
+    document.getElementById("deposit-proof-image-preview").src = "";
+    document.querySelectorAll(".deposit-custom-field-input").forEach((input) => { input.value = ""; });
 
     alert("تم إرسال طلب الإيداع، رح ينراجع من الإدارة قريباً.");
     loadMyDeposits();
