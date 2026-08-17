@@ -1,7 +1,7 @@
 const tg = window.Telegram?.WebApp;
 
 // عدّل هاد الاسم لاسم البوت الفعلي عندك (بدون @) عشان رابط الإحالة يشتغل صح
-const BOT_USERNAME = "ZapchargeBot";
+const BOT_USERNAME = "Zapcharge_Bot";
 
 // مفتاح imgbb لرفع صور الخدمات مباشرة من الجهاز (احتياطي)
 const IMGBB_API_KEY = "42b366412bbf0a1fa2e013b7e01ec53a";
