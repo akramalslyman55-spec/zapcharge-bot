@@ -1,1 +1,453 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Zapcharge</title>
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/static/css/style.css" />
+</head>
+<body>
 
+  <div id="loading-view" class="screen">
+    <div class="spinner"></div>
+  </div>
+
+  <div id="error-view" class="screen hidden">
+    <p class="error-text">تعذّر التحقق من الحساب. جرّب تفتح المتجر من داخل تيليجرام.</p>
+  </div>
+
+  <div id="store-paused-view" class="screen hidden">
+    <p class="error-text">المتجر متوقف مؤقتًا حاليًا ⏸️<br />رجعلنا بعد شوي إن شاء الله.</p>
+  </div>
+
+  <!-- STORE (USER VIEW) -->
+  <div id="store-view" class="screen hidden">
+    <header class="topbar">
+      <span class="brand">Zapcharge</span>
+      <div class="user-pill-container">
+        <span class="balance-pill" id="store-balance">0.00$</span>
+        <button class="btn-top-add" id="topbar-add-funds">
+          <span class="btn-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg></span>
+          شحن
+        </button>
+      </div>
+    </header>
+
+    <main class="content user-content">
+      <!-- Section: Catalog / Store Services -->
+      <div id="user-store-section" class="user-section">
+        <div class="category-pills" id="category-filters">
+          <button class="cat-btn active" data-cat="home"><span>الرئيسية</span></button>
+          <button class="cat-btn" data-cat="games">
+            <span class="cat-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="6" y1="12" x2="10" y2="12"/><line x1="8" y1="10" x2="8" y2="14"/><circle cx="15" cy="13" r="1"/><circle cx="18" cy="11" r="1"/><rect x="2" y="6" width="20" height="12" rx="4"/></svg></span>
+            <span>ألعاب</span>
+          </button>
+          <button class="cat-btn" data-cat="subscriptions">
+            <span class="cat-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3h12l4 6-10 12L2 9Z"/><path d="M11 3 8 9l4 12 4-12-3-6"/><path d="M2 9h20"/></svg></span>
+            <span>اشتراكات</span>
+          </button>
+          <button class="cat-btn" data-cat="apps">
+            <span class="cat-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="2" width="14" height="20" rx="2"/><line x1="12" y1="18" x2="12.01" y2="18"/></svg></span>
+            <span>تطبيقات</span>
+          </button>
+          <button class="cat-btn" data-cat="cards">
+            <span class="cat-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="1" y="4" width="22" height="16" rx="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg></span>
+            <span>بطاقات</span>
+          </button>
+          <button class="cat-btn" data-cat="recharge">
+            <span class="cat-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg></span>
+            <span>تعبئة</span>
+          </button>
+          <button class="cat-btn" data-cat="bills">
+            <span class="cat-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><line x1="10" y1="9" x2="8" y2="9"/></svg></span>
+            <span>فواتير</span>
+          </button>
+        </div>
+
+        <!-- الرئيسية: تعليمات الشحن -->
+        <div id="user-home-section">
+          <h3 class="section-title">نورتونا 🌹</h3>
+          <p class="section-desc">أهلاً فيك بمتجر Zapcharge! تصفّح الخدمات من التبويبات فوق، وشحن رصيدك من هون بسهولة.</p>
+
+          <h3 class="section-title" style="margin-top: 22px;">كيفية شحن الرصيد</h3>
+          <p class="section-desc">حوّل المبلغ لإحدى المحافظ بالأسفل، وبعدها روح لتبويب "شحن" وسجّل تفاصيل التحويل عشان يتم اعتماده وإضافة الرصيد.</p>
+
+          <div id="wallet-cards-list"></div>
+
+          <h3 class="section-title" style="margin-top: 22px;">كيف تشتري خدمة؟</h3>
+          <p class="section-desc">روح لأي تصنيف من فوق (ألعاب، اشتراكات، تطبيقات...) واكتب اسم الخدمة بمربع البحث اللي بيطلع، وبتظهرلك مباشرة تقدر تشتريها بضغطة وحدة.</p>
+        </div>
+
+        <!-- حقل البحث: يظهر بكل التبويبات ما عدا الرئيسية -->
+        <div id="store-search-wrap" class="hidden">
+          <input id="service-search" class="field-input" type="text" placeholder="ابحث عن اسم الخدمة..." style="margin: 14px 0 4px;" />
+        </div>
+
+        <div id="user-services-grid" class="services-grid hidden"></div>
+      </div>
+
+      <!-- Section: Deposit Funds -->
+      <div id="user-deposit-section" class="user-section hidden">
+        <h3 class="section-title">طلب إيداع رصيد</h3>
+
+        <label class="field-label">طريقة الدفع</label>
+        <select id="deposit-method" class="field-input"></select>
+
+        <div class="payment-info-box" id="payment-instructions">
+          قم بالتحويل للحساب، ثم أدخل المبلغ ورقم العملية بالأسفل.
+        </div>
+
+        <label class="field-label" id="deposit-amount-label">المبلغ ($)</label>
+        <input id="deposit-amount" class="field-input" type="number" step="0.1" placeholder="مثال: 5.00" />
+        <p class="section-desc" id="deposit-amount-hint"></p>
+
+        <label class="field-label">رقم العملية / الإشعار</label>
+        <input id="deposit-proof-text" class="field-input" type="text" placeholder="رقم التحويل أو الإشعار" />
+
+        <div id="deposit-custom-fields" class="hidden"></div>
+
+        <div id="deposit-proof-image-group" class="hidden">
+          <label class="field-label">صورة إثبات التحويل</label>
+          <input id="deposit-proof-image" class="field-input hidden" type="text" />
+          <button type="button" class="btn-secondary" id="deposit-upload-image-btn">ارفع صورة من الجهاز</button>
+          <input type="file" id="deposit-proof-image-file" accept="image/*" class="hidden" />
+          <p class="placeholder hidden" id="deposit-upload-status"></p>
+          <img id="deposit-proof-image-preview" class="hidden" style="width: 100%; max-height: 160px; object-fit: cover; border-radius: 10px; margin-top: 8px;" />
+        </div>
+
+        <button class="btn-primary full-width" id="submit-deposit">إرسال طلب الإيداع</button>
+
+        <h4 class="sub-title">سجل إيداعاتك</h4>
+        <div id="user-deposits-list" class="services-list"></div>
+      </div>
+
+      <!-- Section: My Orders -->
+      <div id="user-orders-section" class="user-section hidden">
+        <h3 class="section-title">طلباتي</h3>
+        <div id="user-orders-list" class="services-list"></div>
+      </div>
+
+      <!-- Section: Referral -->
+      <div id="user-referral-section" class="user-section hidden">
+        <h3 class="section-title">
+          <span class="title-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg></span>
+          نظام الإحالة والمكافآت
+        </h3>
+        <p class="section-desc">شارك الرابط مع أصدقائك واحصل على رصيد مجاني عن كل صديق ينضم وينفذ أول إيداع!</p>
+
+        <div class="referral-box">
+          <input id="referral-link" class="field-input" dir="ltr" style="text-align: left;" readonly value="جاري التحميل..." />
+          <button class="btn-primary" id="copy-ref-link">نسخ الرابط</button>
+        </div>
+      </div>
+    </main>
+
+    <!-- Bottom Navigation Bar -->
+    <nav class="bottom-nav">
+      <button class="bnav-btn active" data-user-section="user-store-section">
+        <span class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg></span>
+        <span class="nav-text">المتجر</span>
+      </button>
+      <button class="bnav-btn" data-user-section="user-deposit-section">
+        <span class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="1" y="4" width="22" height="16" rx="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg></span>
+        <span class="nav-text">شحن</span>
+      </button>
+      <button class="bnav-btn" data-user-section="user-orders-section">
+        <span class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="M3.3 7 12 12l8.7-5"/><path d="M12 22V12"/></svg></span>
+        <span class="nav-text">طلباتي</span>
+      </button>
+      <button class="bnav-btn" data-user-section="user-referral-section">
+        <span class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg></span>
+        <span class="nav-text">الإحالة</span>
+      </button>
+      <a class="bnav-link" href="https://t.me/ZapCharg" target="_blank" rel="noopener">
+        <span class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 11 20 4l-3.5 16-5.5-4-3 3z"/><path d="m11 13 5.5-6.5"/></svg></span>
+        <span class="nav-text">الدعم</span>
+      </a>
+    </nav>
+  </div>
+
+  <!-- PACKAGE SELECT MODAL -->
+  <div id="package-select-modal" class="modal hidden">
+    <div class="modal-box">
+      <h3 id="package-select-title">اختر الباقة</h3>
+      <div id="package-select-list" class="services-list"></div>
+      <div class="modal-actions">
+        <button class="btn-secondary full-width" id="cancel-package-select">إلغاء</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- USER BUY MODAL -->
+  <div id="user-buy-modal" class="modal hidden">
+    <div class="modal-box">
+      <h3 id="buy-modal-service-name">اسم الخدمة</h3>
+      <p id="buy-modal-service-price" class="modal-price">0.00$</p>
+
+      <label class="field-label" id="buy-modal-input-label">معرّف اللاعب / رقم الحساب / الإيميل</label>
+      <input id="buy-player-id" class="field-input" type="text" placeholder="أدخل البيانات المطلوب الشحن لها" />
+
+      <div id="buy-modal-quantity-group" class="hidden">
+        <label class="field-label" id="buy-quantity-label">الكمية</label>
+        <input id="buy-quantity" class="field-input" type="number" step="1" placeholder="مثال: 5555" />
+        <p class="payment-info-box" id="buy-quantity-hint"></p>
+      </div>
+
+      <div class="modal-actions">
+        <button class="btn-secondary" id="cancel-buy-modal">إلغاء</button>
+        <button class="btn-primary" id="confirm-buy">تأكيد الشراء</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ADMIN VIEW -->
+  <div id="admin-view" class="screen hidden">
+    <header class="topbar admin">
+      <span class="brand">Zapcharge <span class="admin-tag">إدارة</span></span>
+    </header>
+
+    <nav class="admin-nav">
+      <button class="nav-btn active" data-admin-section="admin-dashboard-section">الرئيسية</button>
+      <button class="nav-btn" data-admin-section="admin-services-section" data-permission="can_manage_prices">الخدمات</button>
+      <button class="nav-btn" data-admin-section="admin-deposits-section" data-permission="can_approve_deposits">الإيداعات</button>
+      <button class="nav-btn" data-admin-section="admin-deposit-methods-section" data-permission="can_approve_deposits">طرق الإيداع</button>
+      <button class="nav-btn" data-admin-section="admin-orders-section" data-permission="can_fulfill_orders">الطلبات</button>
+      <button class="nav-btn" data-admin-section="admin-admins-section" data-permission="can_manage_admins">المشرفين</button>
+      <button class="nav-btn" data-admin-section="admin-broadcast-section" data-permission="can_manage_admins">رسالة جماعية</button>
+      <button class="nav-btn" data-admin-section="admin-stats-section">الأرباح</button>
+      <button class="nav-btn" data-admin-section="admin-logs-section">سجل العمليات</button>
+      <button class="nav-btn" data-admin-section="admin-settings-section" data-permission="can_manage_admins">الإعدادات</button>
+    </nav>
+
+    <main class="content">
+      <div id="admin-dashboard-section" class="admin-section">
+        <div class="stat-row">
+          <div class="stat-card">
+            <span class="stat-label">طلبات معلّقة</span>
+            <span class="stat-value" id="stat-orders">—</span>
+          </div>
+          <div class="stat-card">
+            <span class="stat-label">إيداعات معلّقة</span>
+            <span class="stat-value" id="stat-deposits">—</span>
+          </div>
+        </div>
+
+        <div class="switch-row" id="store-status-row" style="margin-top: 16px;">
+          <label class="field-label" style="margin: 0;">المتجر شغال ويستقبل طلبات جديدة</label>
+          <input type="checkbox" id="store-active-toggle" checked />
+        </div>
+        <p class="section-desc" id="store-status-hint">لما توقفه، الزبائن بيقدروا يشحنوا رصيد ويتصفحوا بس ما رح يقدروا يطلبوا خدمات جديدة لحد ما ترجع تفعّله.</p>
+      </div>
+
+      <div id="admin-services-section" class="admin-section hidden">
+        <input id="admin-service-search" class="field-input" type="text" placeholder="ابحث عن اسم الخدمة..." style="margin-bottom: 12px;" />
+        <button class="btn-primary" id="open-add-service">+ إضافة خدمة</button>
+        <div id="services-list" class="services-list"></div>
+      </div>
+
+      <div id="admin-deposits-section" class="admin-section hidden">
+        <div id="deposits-list" class="services-list"></div>
+      </div>
+
+      <div id="admin-deposit-methods-section" class="admin-section hidden">
+        <button class="btn-primary" id="open-add-deposit-method">+ إضافة طريقة إيداع</button>
+        <div id="deposit-methods-list" class="services-list"></div>
+      </div>
+
+      <div id="admin-orders-section" class="admin-section hidden">
+        <div id="orders-list" class="services-list"></div>
+      </div>
+
+      <div id="admin-admins-section" class="admin-section hidden">
+        <button class="btn-primary" id="open-add-admin">+ إضافة مشرف</button>
+        <div id="admins-list" class="services-list"></div>
+      </div>
+
+      <div id="admin-broadcast-section" class="admin-section hidden">
+        <label class="field-label">نص الرسالة</label>
+        <textarea id="broadcast-message" class="field-input" rows="6" placeholder="اكتب رسالتك هون..."></textarea>
+        <button class="btn-primary" id="send-broadcast">إرسال للجميع</button>
+        <p class="placeholder" id="broadcast-result"></p>
+      </div>
+
+      <div id="admin-stats-section" class="admin-section hidden">
+        <div id="stats-content"></div>
+      </div>
+
+      <div id="admin-logs-section" class="admin-section hidden">
+        <div id="logs-list" class="services-list"></div>
+      </div>
+
+      <div id="admin-settings-section" class="admin-section hidden">
+        <h4 class="sub-title">نسبة مكافأة الإحالة</h4>
+        <p class="section-desc">النسبة يلي بتنضاف لرصيد المُحيل تلقائيًا عن أول إيداع مقبول للزبون يلي حوّله (مثال: اكتب 2 يعني 2%)</p>
+        <label class="field-label">النسبة (%)</label>
+        <input id="settings-referral-percent" class="field-input" type="number" step="0.1" min="0" max="100" placeholder="مثال: 2" />
+        <button class="btn-primary" id="save-referral-percent">حفظ النسبة</button>
+
+        <h4 class="sub-title" style="margin-top: 24px;">أسعار صرف العملات مقابل الدولار</h4>
+        <p class="section-desc">لأي عملة غير الدولار تستخدمها بطرق الإيداع (ليرة سورية، جنيه مصري، إلخ) — حدد كم وحدة منها تساوي دولار واحد. حدّثها كل ما تغيّر الصرف.</p>
+        <div id="exchange-rates-list" class="services-list"></div>
+
+        <label class="field-label" style="margin-top: 12px;">رمز العملة</label>
+        <input id="new-currency-code" class="field-input" type="text" placeholder="مثال: SYP" style="text-transform:uppercase;" />
+        <label class="field-label">كم وحدة = دولار واحد</label>
+        <input id="new-currency-rate" class="field-input" type="number" step="0.01" placeholder="مثال: 15000" />
+        <button class="btn-primary" id="save-exchange-rate">حفظ سعر الصرف</button>
+      </div>
+    </main>
+
+    <div id="service-modal" class="modal hidden">
+      <div class="modal-box">
+        <h3 id="service-modal-title">إضافة خدمة</h3>
+
+        <label class="field-label">التصنيف</label>
+        <select id="service-category" class="field-input">
+          <option value="games">ألعاب</option>
+          <option value="subscriptions">اشتراكات</option>
+          <option value="apps">تطبيقات</option>
+          <option value="cards">بطاقات</option>
+          <option value="recharge">تعبئة رصيد</option>
+          <option value="bills">فواتير</option>
+        </select>
+
+        <label class="field-label">الاسم</label>
+        <input id="service-name" class="field-input" type="text" placeholder="مثال: PUBG Mobile" />
+
+        <label class="field-label">اسم الباقة (اختياري)</label>
+        <input id="service-package" class="field-input" type="text" placeholder="مثال: 60 شدة" />
+
+        <label class="field-label">نص الحقل المطلوب من الزبون (اختياري)</label>
+        <input id="service-input-label" class="field-input" type="text" placeholder="مثال: معرف اللاعب / البريد الإلكتروني" />
+
+        <label class="field-label">نوع التسعير</label>
+        <select id="service-pricing-type" class="field-input">
+          <option value="fixed">باقة بسعر ثابت</option>
+          <option value="variable">كمية حرة (سعر لكل وحدة)</option>
+        </select>
+
+        <div id="service-fixed-group">
+          <label class="field-label">السعر ($)</label>
+          <input id="service-price" class="field-input" type="number" step="any" placeholder="0.00" />
+        </div>
+
+        <div id="service-variable-group" class="hidden">
+          <label class="field-label">اسم الوحدة</label>
+          <input id="service-unit-name" class="field-input" type="text" placeholder="مثال: كونزة" />
+
+          <label class="field-label">الحد الأدنى للكمية</label>
+          <input id="service-min-qty" class="field-input" type="number" step="1" placeholder="مثال: 2500" />
+
+          <label class="field-label">سعر هاي الكمية ($)</label>
+          <input id="service-min-price" class="field-input" type="number" step="any" placeholder="مثال: 0.748" />
+
+          <label class="field-label">الحد الأقصى للكمية (اختياري)</label>
+          <input id="service-max-qty" class="field-input" type="number" step="1" placeholder="مثال: 100000" />
+
+          <input id="service-unit-rate" type="hidden" />
+        </div>
+
+        <label class="field-label">رابط الصورة (اختياري)</label>
+        <input id="service-image" class="field-input" type="text" placeholder="https://..." />
+
+        <button type="button" class="btn-secondary" id="upload-image-btn" style="margin-top: 8px;">ارفع صورة من الجهاز</button>
+        <input type="file" id="service-image-file" accept="image/*" class="hidden" />
+        <p class="placeholder hidden" id="upload-status"></p>
+        <img id="service-image-preview" class="hidden" style="width: 100%; max-height: 160px; object-fit: cover; border-radius: 10px; margin-top: 8px;" />
+
+        <label class="switch-row">
+          <span>مفعّلة</span>
+          <input id="service-active" type="checkbox" checked />
+        </label>
+
+        <div class="modal-actions">
+          <button class="btn-secondary" id="cancel-service-modal">إلغاء</button>
+          <button class="btn-primary" id="save-service">حفظ</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="admin-modal" class="modal hidden">
+      <div class="modal-box">
+        <h3>إضافة مشرف</h3>
+
+        <label class="field-label">آيدي تيليجرام الرقمي</label>
+        <input id="admin-telegram-id" class="field-input" type="text" placeholder="مثال: 123456789" />
+
+        <label class="switch-row">
+          <span>إدارة الأسعار والخدمات</span>
+          <input id="admin-can-prices" type="checkbox" />
+        </label>
+
+        <label class="switch-row">
+          <span>الموافقة على الإيداعات</span>
+          <input id="admin-can-deposits" type="checkbox" />
+        </label>
+
+        <label class="switch-row">
+          <span>تنفيذ الطلبات</span>
+          <input id="admin-can-orders" type="checkbox" />
+        </label>
+
+        <label class="switch-row">
+          <span>إدارة المشرفين</span>
+          <input id="admin-can-admins" type="checkbox" />
+        </label>
+
+        <div class="modal-actions">
+          <button class="btn-secondary" id="cancel-admin-modal">إلغاء</button>
+          <button class="btn-primary" id="save-admin">حفظ</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="deposit-method-modal" class="modal hidden">
+      <div class="modal-box">
+        <h3 id="deposit-method-modal-title">إضافة طريقة إيداع</h3>
+
+        <label class="field-label">اسم الطريقة</label>
+        <input id="dm-name" class="field-input" type="text" placeholder="مثال: بيمو باي" />
+
+        <label class="field-label">الرقم/النص يلي يبين للزبون</label>
+        <input id="dm-display-value" class="field-input" type="text" placeholder="مثال: 0912345678" />
+
+        <label class="field-label">الرقم/النص يلي بينسخ عند الضغط (اختياري)</label>
+        <input id="dm-copy-value" class="field-input" type="text" placeholder="اتركه فاضي لو نفس الرقم فوق" />
+
+        <label class="field-label">رمز العملة</label>
+        <input id="dm-currency" class="field-input" type="text" placeholder="USD" style="text-transform:uppercase;" />
+        <p class="section-desc">اكتب USD للدولار، أو رمز أي عملة تانية (مثال: SYP لليرة السورية، EGP للجنيه المصري) — بشرط تكون مسجّل سعر صرفها من شاشة "الإعدادات" أول.</p>
+
+        <label class="field-label">تعليمات إضافية (اختياري)</label>
+        <textarea id="dm-instructions" class="field-input" rows="3" placeholder="أي ملاحظة إضافية تبين تحت الرقم"></textarea>
+
+        <label class="switch-row">
+          <span>تتطلب صورة إثبات من الزبون؟</span>
+          <input id="dm-requires-proof" type="checkbox" />
+        </label>
+
+        <label class="field-label">حقول إضافية يعبيها الزبون (اختياري)</label>
+        <p class="section-desc">إذا ضفت حقل، بيصير إجباري على الزبون يعبيه وقت تقديم الإيداع بهاي الطريقة. اتركها فاضية إذا ما بدك حقول إضافية.</p>
+        <div id="dm-custom-fields-list"></div>
+        <button type="button" class="btn-secondary" id="dm-add-custom-field">+ إضافة حقل</button>
+
+        <label class="switch-row">
+          <span>مفعّلة (تبين للزبون)</span>
+          <input id="dm-active" type="checkbox" checked />
+        </label>
+
+        <div class="modal-actions">
+          <button class="btn-secondary" id="cancel-deposit-method-modal">إلغاء</button>
+          <button class="btn-primary" id="save-deposit-method">حفظ</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="/static/js/app.js"></script>
+</body>
+</html>
